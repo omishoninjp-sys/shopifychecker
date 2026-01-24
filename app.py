@@ -6,10 +6,14 @@ Shopify 商品健檢工具
 - 翻譯品質檢查（標題、描述、SEO 是否含日文）
 - Metafields 檢查（商品連結是否有填）
 - 銷售設定檢查（channels、庫存追蹤、狀態）
-- 分類檢查（是否在正確的品牌 collection）
+- 分類檢查（自動抓取所有 Collections，根據商品標題開頭比對）
 - Tags 檢查（是否為繁體中文）
 
 作者：GOYOULINK
+
+更新：
+- 自動抓取 Collections，不需手動維護品牌清單
+- 修復啟動時 502 問題（改為背景執行檢查）
 """
 
 import os
@@ -19,7 +23,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, render_template, jsonify
-from datetime import datetime
+from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
@@ -37,27 +41,26 @@ EMAIL_SENDER = 'omishoninjp@gmail.com'
 EMAIL_RECEIVER = 'omishoninjp@gmail.com'
 EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD', '')
 
-# 品牌 Collections 清單
-# 格式：商品標題開頭 -> Collection 名稱
-# 新增品牌時，在這裡加入即可
-BRAND_COLLECTIONS = [
-    '虎屋羊羹',
-    'YOKUMOKU',
-    '資生堂PARLOUR',
-    '小倉山莊',
-    '神戶風月堂',
-    '坂角總本舖',
-    '砂糖奶油樹',
-    'Francais',
-    '銀座菊廼舍',
-    # 新增品牌請加在這裡，例如：
-    # '新品牌名稱',
-]
-
 # Metafield 設定
 # 要檢查的 metafield namespace 和 key
 METAFIELD_LINK_NAMESPACE = 'custom'
 METAFIELD_LINK_KEY = 'link'
+
+# 排除的 Collection 名稱（這些不會用來做品牌比對）
+# 例如：「全部商品」、「特價」、「新品」等非品牌的 Collection
+# 新增排除項目請加在這裡
+EXCLUDED_COLLECTIONS = [
+    '全部商品',
+    '所有商品',
+    'All Products',
+    '特價',
+    '新品',
+    '熱銷',
+    '首頁',
+    'Home',
+    # 新增排除項目請加在這裡，例如：
+    # '季節限定',
+]
 
 # ============================================================
 # 日文檢測函數
@@ -66,7 +69,7 @@ METAFIELD_LINK_KEY = 'link'
 def contains_japanese(text):
     """
     檢查文字是否包含日文字元
-    包括：平假名、片假名、日文漢字特有字元
+    包括：平假名、片假名
     
     Args:
         text: 要檢查的文字
@@ -79,9 +82,6 @@ def contains_japanese(text):
     
     # 平假名範圍：\u3040-\u309F
     # 片假名範圍：\u30A0-\u30FF
-    # 日文漢字（CJK統一漢字）：\u4E00-\u9FFF（這個範圍中日共用，需配合其他判斷）
-    # 日文特殊符號：\u3000-\u303F
-    
     # 主要檢查平假名和片假名，這是日文獨有的
     japanese_pattern = re.compile(r'[\u3040-\u309F\u30A0-\u30FF]')
     return bool(japanese_pattern.search(text))
@@ -155,7 +155,7 @@ def get_all_products():
 
 def get_all_collections():
     """
-    取得所有 Collections
+    取得所有 Collections（包含 Smart 和 Custom）
     
     Returns:
         dict: collection_id -> collection 資料
@@ -179,12 +179,37 @@ def get_all_collections():
     return collections
 
 
-def get_product_collections(product_id):
+def get_collection_names_for_matching(all_collections):
+    """
+    取得用於品牌比對的 Collection 名稱清單
+    會排除 EXCLUDED_COLLECTIONS 中的項目
+    
+    Args:
+        all_collections: 所有 collections 的 dict
+    
+    Returns:
+        list: Collection 名稱清單（用於品牌比對）
+    """
+    names = []
+    for col_id, col_data in all_collections.items():
+        title = col_data.get('title', '')
+        # 排除不用於品牌比對的 Collection
+        if title and title not in EXCLUDED_COLLECTIONS:
+            names.append(title)
+    
+    # 按名稱長度排序（長的優先比對，避免「神戶」比「神戶風月堂」先匹配）
+    names.sort(key=len, reverse=True)
+    
+    return names
+
+
+def get_product_collections(product_id, all_collections):
     """
     取得商品所屬的 Collections
     
     Args:
         product_id: 商品 ID
+        all_collections: 所有 collections 的 dict
     
     Returns:
         list: Collection 名稱列表
@@ -199,8 +224,7 @@ def get_product_collections(product_id):
     collection_ids = [c['collection_id'] for c in collects]
     
     # 取得 collection 名稱
-    collections = get_all_collections()
-    return [collections[cid]['title'] for cid in collection_ids if cid in collections]
+    return [all_collections[cid]['title'] for cid in collection_ids if cid in all_collections]
 
 
 def get_product_metafields(product_id):
@@ -237,14 +261,12 @@ def get_product_channels(product_id):
     Returns:
         dict: 通路資訊
     """
-    # 使用 GraphQL API 取得 publication 狀態
     url = f'https://{SHOPIFY_SHOP}.myshopify.com/admin/api/2024-01/graphql.json'
     
     query = """
     {
         product(id: "gid://shopify/Product/%s") {
             publishedOnCurrentPublication
-            publishedOnPublication(publicationId: "gid://shopify/Publication/0")
             resourcePublications(first: 10) {
                 edges {
                     node {
@@ -268,52 +290,18 @@ def get_product_channels(product_id):
     return response.json()
 
 
-def get_all_publications():
-    """
-    取得所有銷售通路
-    
-    Returns:
-        list: 通路列表
-    """
-    url = f'https://{SHOPIFY_SHOP}.myshopify.com/admin/api/2024-01/graphql.json'
-    
-    query = """
-    {
-        publications(first: 20) {
-            edges {
-                node {
-                    id
-                    name
-                }
-            }
-        }
-    }
-    """
-    
-    response = requests.post(url, headers=get_shopify_headers(), json={'query': query})
-    
-    if response.status_code != 200:
-        return []
-    
-    data = response.json()
-    publications = []
-    for edge in data.get('data', {}).get('publications', {}).get('edges', []):
-        publications.append(edge['node'])
-    
-    return publications
-
-
 # ============================================================
 # 商品檢查函數
 # ============================================================
 
-def check_product(product, all_collections):
+def check_product(product, all_collections, brand_names):
     """
     檢查單一商品的所有問題
     
     Args:
         product: 商品資料
         all_collections: 所有 collections 資料
+        brand_names: 品牌名稱清單（用於比對）
     
     Returns:
         list: 問題列表
@@ -324,7 +312,7 @@ def check_product(product, all_collections):
     
     # ========== 必填欄位檢查 ==========
     
-    # 檢查重量
+    # 檢查重量（重量空白或為 0）
     for variant in product.get('variants', []):
         weight = variant.get('weight', 0)
         if weight is None or weight == 0:
@@ -334,7 +322,7 @@ def check_product(product, all_collections):
                 'detail': f"Variant: {variant.get('title', 'Default')}"
             })
     
-    # 檢查價格
+    # 檢查價格（價格空白或為 0）
     for variant in product.get('variants', []):
         price = variant.get('price', '0')
         if not price or float(price) == 0:
@@ -344,7 +332,7 @@ def check_product(product, all_collections):
                 'detail': f"Variant: {variant.get('title', 'Default')}"
             })
     
-    # 檢查圖片
+    # 檢查圖片（缺少商品圖片）
     if not product.get('images'):
         issues.append({
             'type': '必填欄位',
@@ -352,7 +340,7 @@ def check_product(product, all_collections):
             'detail': ''
         })
     
-    # 檢查 SKU
+    # 檢查 SKU（SKU 空白）
     for variant in product.get('variants', []):
         sku = variant.get('sku', '')
         if not sku or sku.strip() == '':
@@ -381,7 +369,7 @@ def check_product(product, all_collections):
             'detail': '內文包含日文字元'
         })
     
-    # 檢查 SEO 標題
+    # 檢查 SEO 標題是否含日文
     metafields_global_title = product.get('metafields_global_title_tag', '')
     if contains_japanese(metafields_global_title):
         issues.append({
@@ -390,7 +378,7 @@ def check_product(product, all_collections):
             'detail': metafields_global_title[:50] if metafields_global_title else ''
         })
     
-    # 檢查 SEO 描述
+    # 檢查 SEO 描述是否含日文
     metafields_global_description = product.get('metafields_global_description_tag', '')
     if contains_japanese(metafields_global_description):
         issues.append({
@@ -415,7 +403,7 @@ def check_product(product, all_collections):
     
     # ========== 銷售設定檢查 ==========
     
-    # 檢查商品狀態
+    # 檢查商品狀態（應該是 active）
     if product.get('status') != 'active':
         issues.append({
             'type': '銷售設定',
@@ -444,20 +432,21 @@ def check_product(product, all_collections):
                     'detail': f"通路: {pub['node']['publication']['name']}"
                 })
     
-    # ========== 分類檢查 ==========
+    # ========== 分類檢查（自動比對 Collection）==========
     
-    # 檢查是否在正確的品牌 Collection
-    product_collections = get_product_collections(product_id)
+    # 取得商品目前所屬的 Collections
+    product_collections = get_product_collections(product_id, all_collections)
     
-    # 根據商品標題開頭判斷應該屬於哪個品牌
+    # 根據商品標題開頭，找出應該屬於哪個品牌 Collection
+    # brand_names 已經按長度排序，長的優先比對
     expected_brand = None
-    for brand in BRAND_COLLECTIONS:
+    for brand in brand_names:
         if title.startswith(brand):
             expected_brand = brand
             break
     
     if expected_brand:
-        # 檢查是否在對應的 collection 中
+        # 檢查是否在對應的 Collection 中
         if expected_brand not in product_collections:
             issues.append({
                 'type': '分類檢查',
@@ -465,16 +454,16 @@ def check_product(product, all_collections):
                 'detail': f"應該在「{expected_brand}」，目前在: {', '.join(product_collections) if product_collections else '無'}"
             })
     else:
-        # 標題不符合任何品牌
+        # 標題開頭不符合任何 Collection 名稱
         issues.append({
             'type': '分類檢查',
-            'issue': '商品標題不符合任何品牌格式',
+            'issue': '商品標題不符合任何 Collection 名稱',
             'detail': f"標題: {title[:30]}..."
         })
     
     # ========== Tags 檢查 ==========
     
-    # 檢查 tags 是否為繁體中文
+    # 檢查 tags 是否包含日文（應該都是繁體中文）
     tags = product.get('tags', '')
     if tags:
         tag_list = [t.strip() for t in tags.split(',')]
@@ -498,19 +487,30 @@ def run_full_check():
     """
     print(f"[{datetime.now()}] 開始執行商品檢查...")
     
+    # 取得所有商品
     products = get_all_products()
+    print(f"[{datetime.now()}] 取得 {len(products)} 個商品")
+    
+    # 取得所有 Collections
     all_collections = get_all_collections()
+    print(f"[{datetime.now()}] 取得 {len(all_collections)} 個 Collections")
+    
+    # 取得用於品牌比對的 Collection 名稱（自動抓取）
+    brand_names = get_collection_names_for_matching(all_collections)
+    print(f"[{datetime.now()}] 用於比對的品牌: {brand_names}")
     
     results = {
         'check_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'total_products': len(products),
+        'total_collections': len(all_collections),
+        'brand_names': brand_names,  # 顯示偵測到的品牌
         'products_with_issues': 0,
         'total_issues': 0,
         'products': []
     }
     
     for product in products:
-        issues = check_product(product, all_collections)
+        issues = check_product(product, all_collections, brand_names)
         
         if issues:
             results['products_with_issues'] += 1
@@ -567,6 +567,7 @@ def send_email_notification(results):
         <div class="summary">
             <p><strong>檢查時間：</strong>{results['check_time']}</p>
             <p><strong>總商品數：</strong>{results['total_products']}</p>
+            <p><strong>偵測到的品牌：</strong>{', '.join(results.get('brand_names', []))}</p>
             <p><strong>問題商品數：</strong>{results['products_with_issues']}</p>
             <p><strong>總問題數：</strong>{results['total_issues']}</p>
         </div>
@@ -622,12 +623,15 @@ def send_email_notification(results):
 
 def scheduled_check():
     """排程執行的檢查任務"""
-    results = run_full_check()
-    send_email_notification(results)
-    
-    # 儲存結果供網頁顯示
-    global latest_results
-    latest_results = results
+    try:
+        results = run_full_check()
+        send_email_notification(results)
+        
+        # 儲存結果供網頁顯示
+        global latest_results
+        latest_results = results
+    except Exception as e:
+        print(f"[{datetime.now()}] 檢查執行失敗: {e}")
 
 
 # 儲存最新檢查結果
@@ -671,19 +675,26 @@ def api_send_email():
 # 主程式
 # ============================================================
 
+# 建立排程器（全域，讓 gunicorn 也能用）
+scheduler = BackgroundScheduler()
+
+def init_scheduler():
+    """初始化排程器（只執行一次）"""
+    if not scheduler.running:
+        # 每天早上 9 點執行檢查
+        scheduler.add_job(scheduled_check, 'cron', hour=9, minute=0)
+        
+        # 啟動後 30 秒執行第一次檢查（背景執行，不阻塞啟動）
+        scheduler.add_job(scheduled_check, 'date', 
+                          run_date=datetime.now().replace(microsecond=0) + timedelta(seconds=30))
+        
+        scheduler.start()
+        print(f"[{datetime.now()}] 排程器已啟動，30 秒後執行第一次檢查")
+
+# 使用 gunicorn 時初始化
+init_scheduler()
+
 if __name__ == '__main__':
-    # 啟動排程器
-    scheduler = BackgroundScheduler()
-    
-    # 每天早上 9 點執行檢查
-    # 可根據需求調整時間
-    scheduler.add_job(scheduled_check, 'cron', hour=9, minute=0)
-    
-    scheduler.start()
-    
-    # 啟動時執行一次檢查
-    scheduled_check()
-    
     # 啟動 Flask 伺服器
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
