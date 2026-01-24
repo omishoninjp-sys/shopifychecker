@@ -15,8 +15,8 @@ COPY . .
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 
-# 暴露端口
-EXPOSE 5000
+# 暴露端口（Zeabur 會自動分配）
+EXPOSE 8080
 
-# 啟動命令
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "2", "app:app"]
+# 啟動命令（使用 shell 讀取 PORT 環境變數）
+CMD gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 2 --timeout 120 app:app

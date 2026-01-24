@@ -461,19 +461,18 @@ def check_product(product, all_collections, brand_names):
             'detail': f"標題: {title[:30]}..."
         })
     
-    # ========== Tags 檢查 ==========
-    
-    # 檢查 tags 是否包含日文（應該都是繁體中文）
-    tags = product.get('tags', '')
-    if tags:
-        tag_list = [t.strip() for t in tags.split(',')]
-        for tag in tag_list:
-            if not is_traditional_chinese_tag(tag):
-                issues.append({
-                    'type': 'Tags',
-                    'issue': 'Tag 包含日文',
-                    'detail': f"Tag: {tag}"
-                })
+    # ========== Tags 檢查（已停用）==========
+    # 如需啟用，取消下方註解
+    # tags = product.get('tags', '')
+    # if tags:
+    #     tag_list = [t.strip() for t in tags.split(',')]
+    #     for tag in tag_list:
+    #         if not is_traditional_chinese_tag(tag):
+    #             issues.append({
+    #                 'type': 'Tags',
+    #                 'issue': 'Tag 包含日文',
+    #                 'detail': f"Tag: {tag}"
+    #             })
     
     return issues
 
