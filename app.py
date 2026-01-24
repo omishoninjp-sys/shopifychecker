@@ -310,27 +310,29 @@ def check_product(product, all_collections, brand_names):
     product_id = product['id']
     title = product.get('title', '')
     
-    # ========== 必填欄位檢查 ==========
+    # ========== 必填欄位檢查（只檢查主商品，不檢查子類）==========
+    
+    # 取得第一個 Variant（主商品）
+    variants = product.get('variants', [])
+    main_variant = variants[0] if variants else {}
     
     # 檢查重量（重量空白或為 0）
-    for variant in product.get('variants', []):
-        weight = variant.get('weight', 0)
-        if weight is None or weight == 0:
-            issues.append({
-                'type': '必填欄位',
-                'issue': '重量空白或為 0',
-                'detail': f"Variant: {variant.get('title', 'Default')}"
-            })
+    weight = main_variant.get('weight', 0)
+    if weight is None or weight == 0:
+        issues.append({
+            'type': '必填欄位',
+            'issue': '重量空白或為 0',
+            'detail': ''
+        })
     
     # 檢查價格（價格空白或為 0）
-    for variant in product.get('variants', []):
-        price = variant.get('price', '0')
-        if not price or float(price) == 0:
-            issues.append({
-                'type': '必填欄位',
-                'issue': '價格空白或為 0',
-                'detail': f"Variant: {variant.get('title', 'Default')}"
-            })
+    price = main_variant.get('price', '0')
+    if not price or float(price) == 0:
+        issues.append({
+            'type': '必填欄位',
+            'issue': '價格空白或為 0',
+            'detail': ''
+        })
     
     # 檢查圖片（缺少商品圖片）
     if not product.get('images'):
@@ -341,14 +343,13 @@ def check_product(product, all_collections, brand_names):
         })
     
     # 檢查 SKU（SKU 空白）
-    for variant in product.get('variants', []):
-        sku = variant.get('sku', '')
-        if not sku or sku.strip() == '':
-            issues.append({
-                'type': '必填欄位',
-                'issue': 'SKU 空白',
-                'detail': f"Variant: {variant.get('title', 'Default')}"
-            })
+    sku = main_variant.get('sku', '')
+    if not sku or sku.strip() == '':
+        issues.append({
+            'type': '必填欄位',
+            'issue': 'SKU 空白',
+            'detail': ''
+        })
     
     # ========== 翻譯品質檢查 ==========
     
@@ -411,14 +412,13 @@ def check_product(product, all_collections, brand_names):
             'detail': f"目前狀態: {product.get('status')}"
         })
     
-    # 檢查庫存追蹤（應該關閉）
-    for variant in product.get('variants', []):
-        if variant.get('inventory_management') == 'shopify':
-            issues.append({
-                'type': '銷售設定',
-                'issue': '庫存追蹤已開啟（應該關閉）',
-                'detail': f"Variant: {variant.get('title', 'Default')}"
-            })
+    # 檢查庫存追蹤（應該關閉，只檢查主商品）
+    if main_variant.get('inventory_management') == 'shopify':
+        issues.append({
+            'type': '銷售設定',
+            'issue': '庫存追蹤已開啟（應該關閉）',
+            'detail': ''
+        })
     
     # 檢查 Sales Channels（需要全開）
     channels_data = get_product_channels(product_id)
@@ -498,9 +498,15 @@ def run_full_check():
     brand_names = get_collection_names_for_matching(all_collections)
     print(f"[{datetime.now()}] 用於比對的品牌: {brand_names}")
     
+    # 統計草稿商品數量
+    draft_count = sum(1 for p in products if p.get('status') == 'draft')
+    active_count = sum(1 for p in products if p.get('status') == 'active')
+    
     results = {
         'check_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'total_products': len(products),
+        'active_products': active_count,      # 上架中的商品數
+        'draft_products': draft_count,        # 草稿商品數
         'total_collections': len(all_collections),
         'brand_names': brand_names,  # 顯示偵測到的品牌
         'products_with_issues': 0,
@@ -518,10 +524,12 @@ def run_full_check():
                 'id': product['id'],
                 'title': product['title'],
                 'handle': product['handle'],
+                'status': product.get('status', 'unknown'),  # 加入商品狀態
                 'issues': issues
             })
     
     print(f"[{datetime.now()}] 檢查完成！共 {results['total_products']} 個商品，{results['products_with_issues']} 個有問題")
+    print(f"[{datetime.now()}] 上架中: {active_count} 個，草稿: {draft_count} 個")
     
     return results
 
@@ -559,6 +567,7 @@ def send_email_notification(results):
             .product-title {{ font-size: 16px; font-weight: bold; color: #333; }}
             .issue {{ background: #fff3cd; padding: 8px; margin: 5px 0; border-left: 3px solid #ffc107; }}
             .issue-type {{ font-weight: bold; color: #856404; }}
+            .draft {{ color: #dc3545; font-weight: bold; }}
         </style>
     </head>
     <body>
@@ -566,6 +575,8 @@ def send_email_notification(results):
         <div class="summary">
             <p><strong>檢查時間：</strong>{results['check_time']}</p>
             <p><strong>總商品數：</strong>{results['total_products']}</p>
+            <p><strong>上架中：</strong>{results.get('active_products', 0)} 個</p>
+            <p class="draft"><strong>草稿：</strong>{results.get('draft_products', 0)} 個</p>
             <p><strong>偵測到的品牌：</strong>{', '.join(results.get('brand_names', []))}</p>
             <p><strong>問題商品數：</strong>{results['products_with_issues']}</p>
             <p><strong>總問題數：</strong>{results['total_issues']}</p>
