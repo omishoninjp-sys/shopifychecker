@@ -8,12 +8,16 @@ Shopify 商品健檢工具
 - 銷售設定檢查（channels、庫存追蹤、狀態）
 - 分類檢查（自動抓取所有 Collections，根據商品標題開頭比對）
 - Tags 檢查（是否為繁體中文）
+- 【新增】重複商品檢測與刪除（handle 結尾是 -1 的商品）
 
 作者：GOYOULINK
 
 更新：
 - 自動抓取 Collections，不需手動維護品牌清單
 - 修復啟動時 502 問題（改為背景執行檢查）
+- 新增重複商品刪除功能：
+  - /api/find-duplicates - 找出所有 handle 結尾是 -1 的重複商品
+  - /api/delete-duplicates - 刪除所有重複商品
 """
 
 import os
@@ -679,6 +683,129 @@ def api_send_email():
         send_email_notification(latest_results)
         return jsonify({'message': 'Email 已發送'})
     return jsonify({'message': '尚未執行檢查，無法發送 Email'})
+
+
+def delete_product(product_id):
+    """
+    刪除指定商品
+    
+    Args:
+        product_id: 商品 ID
+    
+    Returns:
+        bool: 是否成功刪除
+    """
+    url = f'https://{SHOPIFY_SHOP}.myshopify.com/admin/api/2024-01/products/{product_id}.json'
+    response = requests.delete(url, headers=get_shopify_headers())
+    return response.status_code == 200
+
+
+def find_duplicate_products():
+    """
+    找出所有重複商品（handle 結尾是 -1，且原始商品存在）
+    
+    安全機制：
+    1. handle 必須以 -1 結尾
+    2. 去掉 -1 後的原始 handle 必須存在於商店中
+    3. 這樣才能確保是 Shopify 自動產生的重複商品，而非本來就叫 xxx-1 的商品
+    
+    Returns:
+        list: 重複商品列表
+    """
+    products = get_all_products()
+    
+    # 建立所有 handle 的 set，用於快速查詢
+    all_handles = set(p.get('handle', '') for p in products)
+    
+    duplicates = []
+    
+    for product in products:
+        handle = product.get('handle', '')
+        
+        # 檢查 handle 是否以 -1 結尾
+        if not handle.endswith('-1'):
+            continue
+        
+        # 取得原始 handle（去掉結尾的 -1）
+        original_handle = handle[:-2]  # 移除最後的 "-1"
+        
+        # 安全檢查：原始商品必須存在！
+        # 這樣才能確保這是 Shopify 自動產生的重複商品
+        if original_handle not in all_handles:
+            print(f"[安全檢查] 跳過 {handle}：找不到原始商品 {original_handle}")
+            continue
+        
+        duplicates.append({
+            'id': product['id'],
+            'title': product['title'],
+            'handle': handle,
+            'original_handle': original_handle,  # 顯示對應的原始商品
+            'status': product.get('status', 'unknown'),
+            'created_at': product.get('created_at', '')
+        })
+    
+    return duplicates
+
+
+@app.route('/api/find-duplicates')
+def api_find_duplicates():
+    """
+    API - 找出所有重複商品
+    
+    判定條件（必須同時滿足）：
+    1. handle 結尾是 -1
+    2. 去掉 -1 後的原始商品存在
+    
+    例如：
+    - 小倉山莊春秋米菓禮盒-8顆裝10袋-1 → 會被找出（如果 小倉山莊春秋米菓禮盒-8顆裝10袋 存在）
+    - iphone-11 → 不會被找出（結尾不是 -1）
+    - some-product-1 → 不會被找出（如果 some-product 不存在）
+    """
+    duplicates = find_duplicate_products()
+    return jsonify({
+        'count': len(duplicates),
+        'message': f'找到 {len(duplicates)} 個重複商品（handle 結尾是 -1 且原始商品存在）',
+        'duplicates': duplicates
+    })
+
+
+@app.route('/api/delete-duplicates', methods=['POST', 'GET'])
+def api_delete_duplicates():
+    """
+    API - 刪除所有重複商品（handle 結尾是 -1，且原始商品存在）
+    
+    安全機制：只刪除同時滿足以下條件的商品：
+    1. handle 結尾是 -1
+    2. 去掉 -1 後的原始商品存在
+    """
+    duplicates = find_duplicate_products()
+    
+    if not duplicates:
+        return jsonify({
+            'message': '沒有找到重複商品（或結尾是 -1 但原始商品不存在）',
+            'deleted': 0
+        })
+    
+    deleted = []
+    failed = []
+    
+    for product in duplicates:
+        print(f"[刪除] 正在刪除: {product['title']}")
+        print(f"       handle: {product['handle']} (原始: {product['original_handle']})")
+        if delete_product(product['id']):
+            deleted.append(product)
+            print(f"[刪除] ✓ 成功刪除")
+        else:
+            failed.append(product)
+            print(f"[刪除] ✗ 刪除失敗")
+    
+    return jsonify({
+        'message': f'已刪除 {len(deleted)} 個重複商品',
+        'deleted_count': len(deleted),
+        'failed_count': len(failed),
+        'deleted': deleted,
+        'failed': failed
+    })
 
 
 # ============================================================
