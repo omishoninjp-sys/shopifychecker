@@ -659,7 +659,97 @@ latest_results = None
 @app.route('/')
 def index():
     """首頁 - 顯示檢查結果"""
-    return render_template('index.html', results=latest_results)
+    html = '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Shopify 商品健檢工具</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; text-decoration: none; display: inline-block; }
+        .btn:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-warning { background: #ffc107; color: #333; }
+        .btn-warning:hover { background: #e0a800; }
+        .result { background: #f5f5f5; padding: 15px; margin: 20px 0; border-radius: 5px; white-space: pre-wrap; font-family: monospace; max-height: 500px; overflow-y: auto; }
+        .api-list { background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .api-list code { background: #fff; padding: 2px 6px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Shopify 商品健檢工具</h1>
+    
+    <div class="api-list">
+        <h3>可用 API：</h3>
+        <ul>
+            <li><code>/api/check</code> - 執行完整商品檢查</li>
+            <li><code>/api/results</code> - 取得最新檢查結果</li>
+            <li><code>/api/find-duplicates</code> - 找出重複商品（handle 結尾 -1）</li>
+            <li><code>/api/delete-duplicates</code> - 刪除重複商品</li>
+        </ul>
+    </div>
+    
+    <h2>重複商品管理</h2>
+    <button class="btn btn-warning" onclick="findDuplicates()">🔍 查詢重複商品</button>
+    <button class="btn btn-danger" onclick="deleteDuplicates()">🗑️ 刪除重複商品</button>
+    
+    <h2>商品健檢</h2>
+    <button class="btn" onclick="runCheck()">▶️ 執行檢查</button>
+    <button class="btn" onclick="getResults()">📋 查看結果</button>
+    
+    <h3>執行結果：</h3>
+    <div id="result" class="result">點擊上方按鈕執行操作...</div>
+    
+    <script>
+        async function findDuplicates() {
+            document.getElementById('result').textContent = '正在查詢重複商品...';
+            try {
+                const res = await fetch('/api/find-duplicates');
+                const data = await res.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('result').textContent = '錯誤: ' + e.message;
+            }
+        }
+        
+        async function deleteDuplicates() {
+            if (!confirm('確定要刪除所有重複商品嗎？\\n\\n建議先用「查詢重複商品」確認清單！')) return;
+            document.getElementById('result').textContent = '正在刪除重複商品...';
+            try {
+                const res = await fetch('/api/delete-duplicates');
+                const data = await res.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('result').textContent = '錯誤: ' + e.message;
+            }
+        }
+        
+        async function runCheck() {
+            document.getElementById('result').textContent = '正在執行檢查（可能需要幾分鐘）...';
+            try {
+                const res = await fetch('/api/check');
+                const data = await res.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('result').textContent = '錯誤: ' + e.message;
+            }
+        }
+        
+        async function getResults() {
+            try {
+                const res = await fetch('/api/results');
+                const data = await res.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('result').textContent = '錯誤: ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>'''
+    return html
 
 
 @app.route('/api/check')
