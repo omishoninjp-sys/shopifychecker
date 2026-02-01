@@ -449,6 +449,276 @@ PRODUCT_CATEGORY_MAPPING = {
     '護目鏡': ('gid://shopify/TaxonomyCategory/bi-25-7', 'Business & Industrial > Work Safety Protective Gear > Protective Eyewear'),
     '保護眼鏡': ('gid://shopify/TaxonomyCategory/bi-25-7', 'Business & Industrial > Work Safety Protective Gear > Protective Eyewear'),
     '安全眼鏡': ('gid://shopify/TaxonomyCategory/bi-25-7', 'Business & Industrial > Work Safety Protective Gear > Protective Eyewear'),
+    
+    # ========== 英文關鍵字 (English Keywords) ==========
+    # 適用於 BAPE, Human Made, X-girl 等品牌商品
+    
+    # ---------- 上衣類 (Tops) ----------
+    
+    # T恤 - T-Shirts (注意大小寫變體)
+    'TEE': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'T-SHIRT': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'T-Shirt': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'T SHIRT': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'TSHIRT': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'Tee': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'L/S TEE': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'LS TEE': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'S/S TEE': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'SS TEE': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    
+    # 襯衫 - Shirts
+    'SHIRT': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    'Shirt': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    'FLANNEL': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    'Flannel': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    'BUTTON UP': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    'BUTTON DOWN': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    
+    # 連帽衫/帽T - Hoodies
+    'HOODIE': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'Hoodie': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'HOODY': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'PULLOVER HOODIE': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'ZIP HOODIE': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'FULL ZIP HOODIE': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'PULLOVER HOOD': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'ZIP HOOD': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    
+    # 衛衣/運動衫 - Sweatshirts
+    'SWEATSHIRT': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    'Sweatshirt': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    'SWEAT SHIRT': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    'CREWNECK': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    'CREW NECK': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    'CREWNECK SWEAT': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    '圓領運動衫': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    
+    # 毛衣/針織 - Sweaters
+    'SWEATER': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    'Sweater': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    'KNIT': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    'Knit': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    'KNITWEAR': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    
+    # 開襟毛衣 - Cardigans
+    'CARDIGAN': ('gid://shopify/TaxonomyCategory/aa-1-4-3', 'Clothing > Clothing Tops > Cardigans'),
+    'Cardigan': ('gid://shopify/TaxonomyCategory/aa-1-4-3', 'Clothing > Clothing Tops > Cardigans'),
+    '開襟毛衣': ('gid://shopify/TaxonomyCategory/aa-1-4-3', 'Clothing > Clothing Tops > Cardigans'),
+    
+    # Polo衫 - Polos
+    'POLO': ('gid://shopify/TaxonomyCategory/aa-1-4-6', 'Clothing > Clothing Tops > Polos'),
+    'Polo': ('gid://shopify/TaxonomyCategory/aa-1-4-6', 'Clothing > Clothing Tops > Polos'),
+    'POLO SHIRT': ('gid://shopify/TaxonomyCategory/aa-1-4-6', 'Clothing > Clothing Tops > Polos'),
+    
+    # 背心/Tank Top - Tank Tops
+    'TANK': ('gid://shopify/TaxonomyCategory/aa-1-4-11', 'Clothing > Clothing Tops > Tank Tops'),
+    'TANK TOP': ('gid://shopify/TaxonomyCategory/aa-1-4-11', 'Clothing > Clothing Tops > Tank Tops'),
+    'Tank Top': ('gid://shopify/TaxonomyCategory/aa-1-4-11', 'Clothing > Clothing Tops > Tank Tops'),
+    
+    # ---------- 下身類 (Bottoms) ----------
+    
+    # 長褲 - Pants/Trousers
+    'PANTS': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'Pants': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'TROUSERS': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'Trousers': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'SWEAT PANTS': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'SWEATPANTS': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'TRACK PANTS': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'JOGGER': ('gid://shopify/TaxonomyCategory/aa-1-13-4', 'Clothing > Pants > Joggers'),
+    'JOGGERS': ('gid://shopify/TaxonomyCategory/aa-1-13-4', 'Clothing > Pants > Joggers'),
+    
+    # 牛仔褲 - Jeans/Denim
+    'JEANS': ('gid://shopify/TaxonomyCategory/aa-1-13-3', 'Clothing > Pants > Jeans'),
+    'Jeans': ('gid://shopify/TaxonomyCategory/aa-1-13-3', 'Clothing > Pants > Jeans'),
+    'DENIM PANTS': ('gid://shopify/TaxonomyCategory/aa-1-13-3', 'Clothing > Pants > Jeans'),
+    'DENIM': ('gid://shopify/TaxonomyCategory/aa-1-13-3', 'Clothing > Pants > Jeans'),
+    
+    # 工裝褲 - Cargo Pants
+    'CARGO': ('gid://shopify/TaxonomyCategory/aa-1-13-1', 'Clothing > Pants > Cargo Pants'),
+    'CARGO PANTS': ('gid://shopify/TaxonomyCategory/aa-1-13-1', 'Clothing > Pants > Cargo Pants'),
+    
+    # 短褲 - Shorts
+    'SHORTS': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    'Shorts': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    'SHORT PANTS': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    'SWEAT SHORTS': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    
+    # 裙子 - Skirts
+    'SKIRT': ('gid://shopify/TaxonomyCategory/aa-1-15', 'Clothing > Skirts'),
+    'Skirt': ('gid://shopify/TaxonomyCategory/aa-1-15', 'Clothing > Skirts'),
+    'MINI SKIRT': ('gid://shopify/TaxonomyCategory/aa-1-15', 'Clothing > Skirts'),
+    
+    # ---------- 外套類 (Outerwear) ----------
+    
+    # 外套/夾克 - Jackets
+    'JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'Jacket': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'COACH JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'TRACK JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'VARSITY JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'BOMBER': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'BOMBER JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'MA-1': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'WINDBREAKER': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'LIGHT JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'BLOUSON': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'WORK JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'DENIM JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    '大學外套': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    
+    # 大衣 - Coats
+    'COAT': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'Coat': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'OVERCOAT': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'TRENCH': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'PARKA': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    
+    # 羽絨外套 - Down Jackets
+    'DOWN JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'PUFFER': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'PUFFER JACKET': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    
+    # 背心 - Vests
+    'VEST': ('gid://shopify/TaxonomyCategory/aa-1-11-5', 'Clothing > Outerwear > Vests'),
+    'Vest': ('gid://shopify/TaxonomyCategory/aa-1-11-5', 'Clothing > Outerwear > Vests'),
+    'GILET': ('gid://shopify/TaxonomyCategory/aa-1-11-5', 'Clothing > Outerwear > Vests'),
+    'DOWN VEST': ('gid://shopify/TaxonomyCategory/aa-1-11-5', 'Clothing > Outerwear > Vests'),
+    
+    # ---------- 洋裝/連身 (Dresses & One-Pieces) ----------
+    
+    'DRESS': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    'Dress': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    'ONE PIECE': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    'ONEPIECE': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    
+    # ---------- 工作服/連身衣 (Workwear) ----------
+    
+    'OVERALL': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'OVERALLS': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'COVERALL': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'JUMPSUIT': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'WORKWEAR': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    
+    # ---------- 嬰兒/兒童服飾 (Baby & Kids) ----------
+    
+    'BABY': ('gid://shopify/TaxonomyCategory/aa-1-2', 'Clothing > Baby & Toddler Clothing'),
+    'BODYSUIT': ('gid://shopify/TaxonomyCategory/aa-1-2-1', 'Clothing > Baby & Toddler Clothing > Baby One-Pieces'),
+    'ROMPER': ('gid://shopify/TaxonomyCategory/aa-1-2-1', 'Clothing > Baby & Toddler Clothing > Baby One-Pieces'),
+    'BABY HAT': ('gid://shopify/TaxonomyCategory/aa-2-3-3', 'Clothing Accessories > Baby & Toddler Clothing Accessories > Baby & Toddler Hats'),
+    
+    # ---------- 配件類 (Accessories) ----------
+    
+    # 帽子 - Hats/Caps
+    'CAP': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'Cap': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'HAT': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'Hat': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'BEANIE': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'Beanie': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'KNIT CAP': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'BUCKET HAT': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'SNAPBACK': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'NEW ERA': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    
+    # 包包 - Bags
+    'BAG': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'Bag': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'TOTE': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'TOTE BAG': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'SHOULDER BAG': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'BACKPACK': ('gid://shopify/TaxonomyCategory/lb-1', 'Luggage & Bags > Backpacks'),
+    'WAIST BAG': ('gid://shopify/TaxonomyCategory/lb-6', 'Luggage & Bags > Fanny Packs'),
+    'FANNY PACK': ('gid://shopify/TaxonomyCategory/lb-6', 'Luggage & Bags > Fanny Packs'),
+    'POUCH': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'SACOCHE': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    
+    # 錢包 - Wallets
+    'WALLET': ('gid://shopify/TaxonomyCategory/aa-5-5', 'Handbags, Wallets & Cases > Wallets & Money Clips'),
+    'Wallet': ('gid://shopify/TaxonomyCategory/aa-5-5', 'Handbags, Wallets & Cases > Wallets & Money Clips'),
+    
+    # 腰帶 - Belts
+    'BELT': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    'Belt': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    
+    # 圍巾 - Scarves
+    'SCARF': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    'Scarf': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    'MUFFLER': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    'STOLE': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    'BANDANA': ('gid://shopify/TaxonomyCategory/aa-2-4', 'Clothing Accessories > Bandanas & Headties'),
+    
+    # 手套 - Gloves
+    'GLOVES': ('gid://shopify/TaxonomyCategory/aa-2-14', 'Clothing Accessories > Gloves & Mittens'),
+    'Gloves': ('gid://shopify/TaxonomyCategory/aa-2-14', 'Clothing Accessories > Gloves & Mittens'),
+    
+    # 襪子 - Socks
+    'SOCKS': ('gid://shopify/TaxonomyCategory/aa-1-18', 'Clothing > Socks'),
+    'Socks': ('gid://shopify/TaxonomyCategory/aa-1-18', 'Clothing > Socks'),
+    'SOCK': ('gid://shopify/TaxonomyCategory/aa-1-18', 'Clothing > Socks'),
+    
+    # 領帶 - Neckties
+    'TIE': ('gid://shopify/TaxonomyCategory/aa-2-24', 'Clothing Accessories > Neckties'),
+    'NECKTIE': ('gid://shopify/TaxonomyCategory/aa-2-24', 'Clothing Accessories > Neckties'),
+    'BOW TIE': ('gid://shopify/TaxonomyCategory/aa-2-24', 'Clothing Accessories > Neckties'),
+    
+    # 太陽眼鏡 - Sunglasses
+    'SUNGLASSES': ('gid://shopify/TaxonomyCategory/aa-2-29', 'Clothing Accessories > Sunglasses'),
+    'Sunglasses': ('gid://shopify/TaxonomyCategory/aa-2-29', 'Clothing Accessories > Sunglasses'),
+    
+    # ---------- 鞋類 (Footwear) ----------
+    
+    'SHOES': ('gid://shopify/TaxonomyCategory/aa-8', 'Shoes'),
+    'Shoes': ('gid://shopify/TaxonomyCategory/aa-8', 'Shoes'),
+    'SNEAKERS': ('gid://shopify/TaxonomyCategory/aa-8-8', 'Shoes > Sneakers'),
+    'Sneakers': ('gid://shopify/TaxonomyCategory/aa-8-8', 'Shoes > Sneakers'),
+    'SNEAKER': ('gid://shopify/TaxonomyCategory/aa-8-8', 'Shoes > Sneakers'),
+    'BOOTS': ('gid://shopify/TaxonomyCategory/aa-8-3', 'Shoes > Boots'),
+    'Boots': ('gid://shopify/TaxonomyCategory/aa-8-3', 'Shoes > Boots'),
+    'SANDALS': ('gid://shopify/TaxonomyCategory/aa-8-6', 'Shoes > Sandals'),
+    'Sandals': ('gid://shopify/TaxonomyCategory/aa-8-6', 'Shoes > Sandals'),
+    'SLIDES': ('gid://shopify/TaxonomyCategory/aa-8-6', 'Shoes > Sandals'),
+    'SLIPPERS': ('gid://shopify/TaxonomyCategory/aa-8-7', 'Shoes > Slippers'),
+    'Slippers': ('gid://shopify/TaxonomyCategory/aa-8-7', 'Shoes > Slippers'),
+    
+    # ---------- 飾品/珠寶 (Jewelry) ----------
+    
+    'EARRINGS': ('gid://shopify/TaxonomyCategory/aa-6-5', 'Jewelry > Earrings'),
+    'Earrings': ('gid://shopify/TaxonomyCategory/aa-6-5', 'Jewelry > Earrings'),
+    'NECKLACE': ('gid://shopify/TaxonomyCategory/aa-6-8', 'Jewelry > Necklaces'),
+    'Necklace': ('gid://shopify/TaxonomyCategory/aa-6-8', 'Jewelry > Necklaces'),
+    'BRACELET': ('gid://shopify/TaxonomyCategory/aa-6-3', 'Jewelry > Bracelets'),
+    'Bracelet': ('gid://shopify/TaxonomyCategory/aa-6-3', 'Jewelry > Bracelets'),
+    'RING': ('gid://shopify/TaxonomyCategory/aa-6-9', 'Jewelry > Rings'),
+    'Ring': ('gid://shopify/TaxonomyCategory/aa-6-9', 'Jewelry > Rings'),
+    'PENDANT': ('gid://shopify/TaxonomyCategory/aa-6-4', 'Jewelry > Charms & Pendants'),
+    'CHAIN': ('gid://shopify/TaxonomyCategory/aa-6-8', 'Jewelry > Necklaces'),
+    
+    # ---------- 其他配件 (Other Accessories) ----------
+    
+    'KEYCHAIN': ('gid://shopify/TaxonomyCategory/aa-4-1', 'Handbag & Wallet Accessories > Keychains'),
+    'KEYRING': ('gid://shopify/TaxonomyCategory/aa-4-1', 'Handbag & Wallet Accessories > Keychains'),
+    'KEY RING': ('gid://shopify/TaxonomyCategory/aa-4-1', 'Handbag & Wallet Accessories > Keychains'),
+    '鑰匙圈': ('gid://shopify/TaxonomyCategory/aa-4-1', 'Handbag & Wallet Accessories > Keychains'),
+    
+    # 手錶 - Watches
+    'WATCH': ('gid://shopify/TaxonomyCategory/aa-6-12', 'Jewelry > Watches'),
+    'Watch': ('gid://shopify/TaxonomyCategory/aa-6-12', 'Jewelry > Watches'),
+    
+    # ---------- 家居/生活用品 (Home & Lifestyle) ----------
+    
+    'CUSHION': ('gid://shopify/TaxonomyCategory/hg-3-10', 'Home & Garden > Decor > Chair & Sofa Cushions'),
+    'PILLOW': ('gid://shopify/TaxonomyCategory/hg-3-10', 'Home & Garden > Decor > Chair & Sofa Cushions'),
+    'RUG': ('gid://shopify/TaxonomyCategory/hg-3-54', 'Home & Garden > Decor > Rugs'),
+    'MAT': ('gid://shopify/TaxonomyCategory/hg-3-54', 'Home & Garden > Decor > Rugs'),
+    'TOWEL': ('gid://shopify/TaxonomyCategory/hg-9-4', 'Home & Garden > Linens & Bedding > Towels'),
+    'BLANKET': ('gid://shopify/TaxonomyCategory/hg-9-1', 'Home & Garden > Linens & Bedding > Bedding'),
+    'MUG': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    'CUP': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    'PLATE': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    'CUTLERY': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    'STOOL': ('gid://shopify/TaxonomyCategory/fu-9', 'Furniture > Chairs'),
 }
 
 # 預設類別（當找不到匹配時使用）
