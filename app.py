@@ -9,6 +9,7 @@ Shopify 商品健檢工具
 - 分類檢查（自動抓取所有 Collections，根據商品標題開頭比對）
 - Tags 檢查（是否為繁體中文）
 - 【修復】重複商品檢測與刪除（handle 結尾是 -1, -2, -3... 的商品）
+- 【新增】商品類別自動分類（根據關鍵字對應 Shopify 標準分類法）
 
 作者：GOYOULINK
 
@@ -16,6 +17,7 @@ Shopify 商品健檢工具
 - 修復 API 分頁不穩定問題（加入重試機制）
 - 修復刪除失敗問題（顯示詳細錯誤訊息）
 - 加入商品數量驗證
+- 新增商品類別自動分類功能
 """
 
 import os
@@ -24,7 +26,7 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
@@ -60,6 +62,398 @@ EXCLUDED_COLLECTIONS = [
     '首頁',
     'Home',
 ]
+
+# ============================================================
+# 商品類別對照表 - Shopify 標準分類法
+# 格式：關鍵字 -> (類別 GID, 類別名稱)
+# GID 格式：gid://shopify/TaxonomyCategory/xxx
+# 
+# 分類 ID 說明：
+# - aa = Apparel & Accessories (服飾)
+# - fb = Food, Beverages & Tobacco (食品飲料)
+# - hg = Home & Garden (家居)
+# - hb = Health & Beauty (美妝保養)
+# - bi = Business & Industrial (商業工業)
+# ============================================================
+
+PRODUCT_CATEGORY_MAPPING = {
+    # ========== 食品類 (Food, Beverages & Tobacco) ==========
+    
+    # 餅乾/曲奇 - Food Items > Bakery > Cookies
+    '曲奇': ('gid://shopify/TaxonomyCategory/fb-2-1-6', 'Food Items > Bakery > Cookies'),
+    '餅乾': ('gid://shopify/TaxonomyCategory/fb-2-1-6', 'Food Items > Bakery > Cookies'),
+    'クッキー': ('gid://shopify/TaxonomyCategory/fb-2-1-6', 'Food Items > Bakery > Cookies'),
+    
+    # 蛋糕/甜點 - Food Items > Bakery > Cakes & Dessert Bars
+    '蛋糕': ('gid://shopify/TaxonomyCategory/fb-2-1-4', 'Food Items > Bakery > Cakes & Dessert Bars'),
+    '甜點': ('gid://shopify/TaxonomyCategory/fb-2-1-4', 'Food Items > Bakery > Cakes & Dessert Bars'),
+    'ケーキ': ('gid://shopify/TaxonomyCategory/fb-2-1-4', 'Food Items > Bakery > Cakes & Dessert Bars'),
+    '年輪蛋糕': ('gid://shopify/TaxonomyCategory/fb-2-1-4', 'Food Items > Bakery > Cakes & Dessert Bars'),
+    'バウムクーヘン': ('gid://shopify/TaxonomyCategory/fb-2-1-4', 'Food Items > Bakery > Cakes & Dessert Bars'),
+    'カステラ': ('gid://shopify/TaxonomyCategory/fb-2-1-4', 'Food Items > Bakery > Cakes & Dessert Bars'),
+    '長崎蛋糕': ('gid://shopify/TaxonomyCategory/fb-2-1-4', 'Food Items > Bakery > Cakes & Dessert Bars'),
+    
+    # 巧克力 - Food Items > Candy & Chocolate > Chocolate
+    '巧克力': ('gid://shopify/TaxonomyCategory/fb-2-3-2', 'Food Items > Candy & Chocolate > Chocolate'),
+    'チョコレート': ('gid://shopify/TaxonomyCategory/fb-2-3-2', 'Food Items > Candy & Chocolate > Chocolate'),
+    'チョコ': ('gid://shopify/TaxonomyCategory/fb-2-3-2', 'Food Items > Candy & Chocolate > Chocolate'),
+    '生巧克力': ('gid://shopify/TaxonomyCategory/fb-2-3-2', 'Food Items > Candy & Chocolate > Chocolate'),
+    '生チョコ': ('gid://shopify/TaxonomyCategory/fb-2-3-2', 'Food Items > Candy & Chocolate > Chocolate'),
+    
+    # 糖果 - Food Items > Candy & Chocolate > Candy
+    '糖果': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    'キャンディ': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    '飴': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    '金平糖': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    
+    # 仙貝/米果 - Food Items > Snack Foods > Crackers (更準確的分類)
+    '仙貝': ('gid://shopify/TaxonomyCategory/fb-2-17-5', 'Food Items > Snack Foods > Crackers'),
+    '米果': ('gid://shopify/TaxonomyCategory/fb-2-17-5', 'Food Items > Snack Foods > Crackers'),
+    'せんべい': ('gid://shopify/TaxonomyCategory/fb-2-17-5', 'Food Items > Snack Foods > Crackers'),
+    'おかき': ('gid://shopify/TaxonomyCategory/fb-2-17-5', 'Food Items > Snack Foods > Crackers'),
+    'あられ': ('gid://shopify/TaxonomyCategory/fb-2-17-5', 'Food Items > Snack Foods > Crackers'),
+    '揚餅': ('gid://shopify/TaxonomyCategory/fb-2-17-5', 'Food Items > Snack Foods > Crackers'),
+    
+    # 羊羹/和菓子 - Food Items > Candy & Chocolate > Candy
+    '羊羹': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    'ようかん': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    '和菓子': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    '最中': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    'もなか': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    '大福': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    '饅頭': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    'まんじゅう': ('gid://shopify/TaxonomyCategory/fb-2-3-1', 'Food Items > Candy & Chocolate > Candy'),
+    
+    # 果凍/布丁 - Food Items > Snack Foods > Pudding & Gelatin Snacks
+    '果凍': ('gid://shopify/TaxonomyCategory/fb-2-17-12', 'Food Items > Snack Foods > Pudding & Gelatin Snacks'),
+    '布丁': ('gid://shopify/TaxonomyCategory/fb-2-17-12', 'Food Items > Snack Foods > Pudding & Gelatin Snacks'),
+    'ゼリー': ('gid://shopify/TaxonomyCategory/fb-2-17-12', 'Food Items > Snack Foods > Pudding & Gelatin Snacks'),
+    'プリン': ('gid://shopify/TaxonomyCategory/fb-2-17-12', 'Food Items > Snack Foods > Pudding & Gelatin Snacks'),
+    '水羊羹': ('gid://shopify/TaxonomyCategory/fb-2-17-12', 'Food Items > Snack Foods > Pudding & Gelatin Snacks'),
+    
+    # 禮盒/綜合 - Food Items > Food Gift Baskets
+    '禮盒': ('gid://shopify/TaxonomyCategory/fb-2-8', 'Food Items > Food Gift Baskets'),
+    'ギフト': ('gid://shopify/TaxonomyCategory/fb-2-8', 'Food Items > Food Gift Baskets'),
+    '詰め合わせ': ('gid://shopify/TaxonomyCategory/fb-2-8', 'Food Items > Food Gift Baskets'),
+    '綜合': ('gid://shopify/TaxonomyCategory/fb-2-8', 'Food Items > Food Gift Baskets'),
+    'セット': ('gid://shopify/TaxonomyCategory/fb-2-8', 'Food Items > Food Gift Baskets'),
+    'アソート': ('gid://shopify/TaxonomyCategory/fb-2-8', 'Food Items > Food Gift Baskets'),
+    
+    # 麵包 - Food Items > Bakery > Breads & Buns
+    '麵包': ('gid://shopify/TaxonomyCategory/fb-2-1-3', 'Food Items > Bakery > Breads & Buns'),
+    'パン': ('gid://shopify/TaxonomyCategory/fb-2-1-3', 'Food Items > Bakery > Breads & Buns'),
+    
+    # 派/塔 - Food Items > Bakery > Pies & Tarts
+    '派': ('gid://shopify/TaxonomyCategory/fb-2-1-14', 'Food Items > Bakery > Pies & Tarts'),
+    '塔': ('gid://shopify/TaxonomyCategory/fb-2-1-14', 'Food Items > Bakery > Pies & Tarts'),
+    'パイ': ('gid://shopify/TaxonomyCategory/fb-2-1-14', 'Food Items > Bakery > Pies & Tarts'),
+    'タルト': ('gid://shopify/TaxonomyCategory/fb-2-1-14', 'Food Items > Bakery > Pies & Tarts'),
+    
+    # 酥/糕點 - Food Items > Bakery > Pastries & Scones
+    '酥': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    '糕': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    '馬卡龍': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    'マカロン': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    'フィナンシェ': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    'マドレーヌ': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    '費南雪': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    '瑪德蓮': ('gid://shopify/TaxonomyCategory/fb-2-1-13', 'Food Items > Bakery > Pastries & Scones'),
+    
+    # 零食/點心 - Food Items > Snack Foods
+    '零食': ('gid://shopify/TaxonomyCategory/fb-2-17', 'Food Items > Snack Foods'),
+    '點心': ('gid://shopify/TaxonomyCategory/fb-2-17', 'Food Items > Snack Foods'),
+    'お菓子': ('gid://shopify/TaxonomyCategory/fb-2-17', 'Food Items > Snack Foods'),
+    'スナック': ('gid://shopify/TaxonomyCategory/fb-2-17', 'Food Items > Snack Foods'),
+    '菓子': ('gid://shopify/TaxonomyCategory/fb-2-17', 'Food Items > Snack Foods'),
+    
+    # 茶/飲品 - Beverages > Tea & Infusions
+    '茶': ('gid://shopify/TaxonomyCategory/fb-1-14', 'Beverages > Tea & Infusions'),
+    '抹茶': ('gid://shopify/TaxonomyCategory/fb-1-14', 'Beverages > Tea & Infusions'),
+    '紅茶': ('gid://shopify/TaxonomyCategory/fb-1-14', 'Beverages > Tea & Infusions'),
+    '煎茶': ('gid://shopify/TaxonomyCategory/fb-1-14', 'Beverages > Tea & Infusions'),
+    '緑茶': ('gid://shopify/TaxonomyCategory/fb-1-14', 'Beverages > Tea & Infusions'),
+    'ほうじ茶': ('gid://shopify/TaxonomyCategory/fb-1-14', 'Beverages > Tea & Infusions'),
+    '玄米茶': ('gid://shopify/TaxonomyCategory/fb-1-14', 'Beverages > Tea & Infusions'),
+    
+    # ========== 服飾類 (Apparel & Accessories) ==========
+    
+    # ---------- 傳統服飾/和服 ----------
+    # Traditional & Ceremonial Clothing > Kimonos
+    '和服': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '着物': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '浴衣': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '袴': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '振袖': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '訪問着': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '留袖': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '小紋': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '紬': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '羽織': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '色無地': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '付け下げ': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '絞り': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '大島紬': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '結城紬': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '男着物': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    '女着物': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    'きもの': ('gid://shopify/TaxonomyCategory/aa-1-21-1', 'Clothing > Traditional & Ceremonial Clothing > Kimonos'),
+    
+    # ---------- 一般服飾 ----------
+    
+    # 上衣/T恤 - Clothing > Clothing Tops > T-Shirts
+    'T恤': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    'Tシャツ': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    '短袖': ('gid://shopify/TaxonomyCategory/aa-1-4-10', 'Clothing > Clothing Tops > T-Shirts'),
+    
+    # 襯衫 - Clothing > Clothing Tops > Shirts
+    '襯衫': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    'シャツ': ('gid://shopify/TaxonomyCategory/aa-1-4-7', 'Clothing > Clothing Tops > Shirts'),
+    'ブラウス': ('gid://shopify/TaxonomyCategory/aa-1-4-1', 'Clothing > Clothing Tops > Blouses'),
+    '女襯衫': ('gid://shopify/TaxonomyCategory/aa-1-4-1', 'Clothing > Clothing Tops > Blouses'),
+    
+    # 毛衣/針織 - Clothing > Clothing Tops > Sweaters
+    '毛衣': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    'セーター': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    'ニット': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    '針織': ('gid://shopify/TaxonomyCategory/aa-1-4-8', 'Clothing > Clothing Tops > Sweaters'),
+    'カーディガン': ('gid://shopify/TaxonomyCategory/aa-1-4-3', 'Clothing > Clothing Tops > Cardigans'),
+    '開襟衫': ('gid://shopify/TaxonomyCategory/aa-1-4-3', 'Clothing > Clothing Tops > Cardigans'),
+    
+    # 連帽衫/衛衣 - Clothing > Clothing Tops > Hoodies
+    '連帽': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'パーカー': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    'フーディー': ('gid://shopify/TaxonomyCategory/aa-1-4-4', 'Clothing > Clothing Tops > Hoodies'),
+    '衛衣': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    'トレーナー': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    'スウェット': ('gid://shopify/TaxonomyCategory/aa-1-4-9', 'Clothing > Clothing Tops > Sweatshirts'),
+    
+    # 長褲 - Clothing > Pants > Trousers
+    '長褲': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'パンツ': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'ズボン': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'スラックス': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    'トラウザー': ('gid://shopify/TaxonomyCategory/aa-1-13-7', 'Clothing > Pants > Trousers'),
+    
+    # 牛仔褲 - Clothing > Pants > Jeans
+    '牛仔褲': ('gid://shopify/TaxonomyCategory/aa-1-13-3', 'Clothing > Pants > Jeans'),
+    'ジーンズ': ('gid://shopify/TaxonomyCategory/aa-1-13-3', 'Clothing > Pants > Jeans'),
+    'デニム': ('gid://shopify/TaxonomyCategory/aa-1-13-3', 'Clothing > Pants > Jeans'),
+    
+    # 工裝褲 - Clothing > Pants > Cargo Pants
+    '工裝褲': ('gid://shopify/TaxonomyCategory/aa-1-13-1', 'Clothing > Pants > Cargo Pants'),
+    'カーゴパンツ': ('gid://shopify/TaxonomyCategory/aa-1-13-1', 'Clothing > Pants > Cargo Pants'),
+    '工作褲': ('gid://shopify/TaxonomyCategory/aa-1-13-1', 'Clothing > Pants > Cargo Pants'),
+    
+    # 短褲 - Clothing > Shorts
+    '短褲': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    'ショートパンツ': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    'ショーツ': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    '半褲': ('gid://shopify/TaxonomyCategory/aa-1-14', 'Clothing > Shorts'),
+    
+    # 裙子 - Clothing > Skirts
+    '裙': ('gid://shopify/TaxonomyCategory/aa-1-15', 'Clothing > Skirts'),
+    'スカート': ('gid://shopify/TaxonomyCategory/aa-1-15', 'Clothing > Skirts'),
+    '裙子': ('gid://shopify/TaxonomyCategory/aa-1-15', 'Clothing > Skirts'),
+    
+    # 洋裝/連身裙 - Clothing > Dresses
+    '洋裝': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    '連身裙': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    'ワンピース': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    'ドレス': ('gid://shopify/TaxonomyCategory/aa-1-5', 'Clothing > Dresses'),
+    
+    # 外套/夾克 - Clothing > Outerwear > Coats & Jackets
+    '外套': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    '夾克': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'コート': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'ジャケット': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'アウター': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    'ブルゾン': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    '上着': ('gid://shopify/TaxonomyCategory/aa-1-11-2', 'Clothing > Outerwear > Coats & Jackets'),
+    
+    # 背心 - Clothing > Outerwear > Vests
+    '背心': ('gid://shopify/TaxonomyCategory/aa-1-11-5', 'Clothing > Outerwear > Vests'),
+    'ベスト': ('gid://shopify/TaxonomyCategory/aa-1-11-5', 'Clothing > Outerwear > Vests'),
+    'チョッキ': ('gid://shopify/TaxonomyCategory/aa-1-11-5', 'Clothing > Outerwear > Vests'),
+    
+    # ---------- 工作服/制服 ----------
+    
+    # 工作服/連身工作服 - Clothing > Uniforms > Contractor Pants & Coveralls
+    '工作服': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    '作業服': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    '作業着': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'つなぎ': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'ツナギ': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    '連身工作服': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'カバーオール': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    'オーバーオール': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    '吊帶褲': ('gid://shopify/TaxonomyCategory/aa-1-22-1', 'Clothing > Uniforms > Contractor Pants & Coveralls'),
+    
+    # 制服 - Clothing > Uniforms
+    '制服': ('gid://shopify/TaxonomyCategory/aa-1-22', 'Clothing > Uniforms'),
+    'ユニフォーム': ('gid://shopify/TaxonomyCategory/aa-1-22', 'Clothing > Uniforms'),
+    '事務服': ('gid://shopify/TaxonomyCategory/aa-1-22', 'Clothing > Uniforms'),
+    'オフィスウェア': ('gid://shopify/TaxonomyCategory/aa-1-22', 'Clothing > Uniforms'),
+    
+    # 白袍/實驗服 - Clothing > Uniforms > White Coats
+    '白袍': ('gid://shopify/TaxonomyCategory/aa-1-22-8', 'Clothing > Uniforms > White Coats'),
+    '白衣': ('gid://shopify/TaxonomyCategory/aa-1-22-8', 'Clothing > Uniforms > White Coats'),
+    '実験衣': ('gid://shopify/TaxonomyCategory/aa-1-22-8', 'Clothing > Uniforms > White Coats'),
+    '醫師服': ('gid://shopify/TaxonomyCategory/aa-1-22-8', 'Clothing > Uniforms > White Coats'),
+    
+    # 餐飲制服 - Clothing > Uniforms > Food Service Uniforms
+    '廚師服': ('gid://shopify/TaxonomyCategory/aa-1-22-3', 'Clothing > Uniforms > Food Service Uniforms'),
+    'コック服': ('gid://shopify/TaxonomyCategory/aa-1-22-3', 'Clothing > Uniforms > Food Service Uniforms'),
+    '調理服': ('gid://shopify/TaxonomyCategory/aa-1-22-3', 'Clothing > Uniforms > Food Service Uniforms'),
+    '餐飲制服': ('gid://shopify/TaxonomyCategory/aa-1-22-3', 'Clothing > Uniforms > Food Service Uniforms'),
+    
+    # 安全服 - Clothing > Uniforms > Security Uniforms
+    '警衛服': ('gid://shopify/TaxonomyCategory/aa-1-22-6', 'Clothing > Uniforms > Security Uniforms'),
+    '保全服': ('gid://shopify/TaxonomyCategory/aa-1-22-6', 'Clothing > Uniforms > Security Uniforms'),
+    '警備服': ('gid://shopify/TaxonomyCategory/aa-1-22-6', 'Clothing > Uniforms > Security Uniforms'),
+    
+    # ---------- 配件類 ----------
+    
+    # 腰帶/帶 - Clothing Accessories > Belts
+    '帶': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    '帯': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    '腰帶': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    '角帯': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    '兵児帯': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    '名古屋帯': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    '袋帯': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    '半幅帯': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    'ベルト': ('gid://shopify/TaxonomyCategory/aa-2-6', 'Clothing Accessories > Belts'),
+    
+    # 帽子 - Clothing Accessories > Hats
+    '帽子': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    '帽': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    '帽': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'キャップ': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    'ハット': ('gid://shopify/TaxonomyCategory/aa-2-18', 'Clothing Accessories > Hats'),
+    
+    # 圍巾 - Clothing Accessories > Scarves & Shawls
+    '圍巾': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    '披肩': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    'スカーフ': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    'マフラー': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    'ショール': ('gid://shopify/TaxonomyCategory/aa-2-27', 'Clothing Accessories > Scarves & Shawls'),
+    
+    # 手套 - Clothing Accessories > Gloves & Mittens
+    '手套': ('gid://shopify/TaxonomyCategory/aa-2-14', 'Clothing Accessories > Gloves & Mittens'),
+    'グローブ': ('gid://shopify/TaxonomyCategory/aa-2-14', 'Clothing Accessories > Gloves & Mittens'),
+    '手袋': ('gid://shopify/TaxonomyCategory/aa-2-14', 'Clothing Accessories > Gloves & Mittens'),
+    
+    # 髮飾 - Clothing Accessories > Hair Accessories
+    '髮飾': ('gid://shopify/TaxonomyCategory/aa-2-15', 'Clothing Accessories > Hair Accessories'),
+    '髪飾り': ('gid://shopify/TaxonomyCategory/aa-2-15', 'Clothing Accessories > Hair Accessories'),
+    '簪': ('gid://shopify/TaxonomyCategory/aa-2-15', 'Clothing Accessories > Hair Accessories'),
+    'かんざし': ('gid://shopify/TaxonomyCategory/aa-2-15', 'Clothing Accessories > Hair Accessories'),
+    'ヘアアクセサリー': ('gid://shopify/TaxonomyCategory/aa-2-15', 'Clothing Accessories > Hair Accessories'),
+    '髮夾': ('gid://shopify/TaxonomyCategory/aa-2-15', 'Clothing Accessories > Hair Accessories'),
+    'ヘアピン': ('gid://shopify/TaxonomyCategory/aa-2-15', 'Clothing Accessories > Hair Accessories'),
+    
+    # 領帶 - Clothing Accessories > Neckties
+    '領帶': ('gid://shopify/TaxonomyCategory/aa-2-24', 'Clothing Accessories > Neckties'),
+    'ネクタイ': ('gid://shopify/TaxonomyCategory/aa-2-24', 'Clothing Accessories > Neckties'),
+    '蝴蝶結': ('gid://shopify/TaxonomyCategory/aa-2-24', 'Clothing Accessories > Neckties'),
+    
+    # ---------- 包包類 ----------
+    
+    # 手提包 - Handbags, Wallets & Cases > Handbags
+    '手提包': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'ハンドバッグ': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    '提包': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'バッグ': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    '包': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    '鞄': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'トートバッグ': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    'ショルダーバッグ': ('gid://shopify/TaxonomyCategory/aa-5-4', 'Handbags, Wallets & Cases > Handbags'),
+    
+    # 錢包 - Handbags, Wallets & Cases > Wallets & Money Clips
+    '錢包': ('gid://shopify/TaxonomyCategory/aa-5-5', 'Handbags, Wallets & Cases > Wallets & Money Clips'),
+    '財布': ('gid://shopify/TaxonomyCategory/aa-5-5', 'Handbags, Wallets & Cases > Wallets & Money Clips'),
+    'ウォレット': ('gid://shopify/TaxonomyCategory/aa-5-5', 'Handbags, Wallets & Cases > Wallets & Money Clips'),
+    
+    # ---------- 鞋類 ----------
+    
+    # 涼鞋 - Shoes > Sandals
+    '涼鞋': ('gid://shopify/TaxonomyCategory/aa-8-6', 'Shoes > Sandals'),
+    '草履': ('gid://shopify/TaxonomyCategory/aa-8-6', 'Shoes > Sandals'),
+    '下駄': ('gid://shopify/TaxonomyCategory/aa-8-6', 'Shoes > Sandals'),
+    'サンダル': ('gid://shopify/TaxonomyCategory/aa-8-6', 'Shoes > Sandals'),
+    
+    # 靴子 - Shoes > Boots
+    '靴子': ('gid://shopify/TaxonomyCategory/aa-8-3', 'Shoes > Boots'),
+    'ブーツ': ('gid://shopify/TaxonomyCategory/aa-8-3', 'Shoes > Boots'),
+    '長靴': ('gid://shopify/TaxonomyCategory/aa-8-3', 'Shoes > Boots'),
+    
+    # 運動鞋 - Shoes > Sneakers
+    '運動鞋': ('gid://shopify/TaxonomyCategory/aa-8-8', 'Shoes > Sneakers'),
+    'スニーカー': ('gid://shopify/TaxonomyCategory/aa-8-8', 'Shoes > Sneakers'),
+    '球鞋': ('gid://shopify/TaxonomyCategory/aa-8-8', 'Shoes > Sneakers'),
+    
+    # 足袋 - Shoes > Slippers
+    '足袋': ('gid://shopify/TaxonomyCategory/aa-8-7', 'Shoes > Slippers'),
+    '拖鞋': ('gid://shopify/TaxonomyCategory/aa-8-7', 'Shoes > Slippers'),
+    'スリッパ': ('gid://shopify/TaxonomyCategory/aa-8-7', 'Shoes > Slippers'),
+    '室內鞋': ('gid://shopify/TaxonomyCategory/aa-8-7', 'Shoes > Slippers'),
+    
+    # 安全鞋 - Shoes > Athletic Shoes (工作安全鞋比較接近運動鞋類別)
+    '安全鞋': ('gid://shopify/TaxonomyCategory/aa-8-1', 'Shoes > Athletic Shoes'),
+    '安全靴': ('gid://shopify/TaxonomyCategory/aa-8-1', 'Shoes > Athletic Shoes'),
+    '工作鞋': ('gid://shopify/TaxonomyCategory/aa-8-1', 'Shoes > Athletic Shoes'),
+    '作業靴': ('gid://shopify/TaxonomyCategory/aa-8-1', 'Shoes > Athletic Shoes'),
+    
+    # ========== 家居/生活用品 (Home & Garden) ==========
+    
+    # 餐具 - Kitchen & Dining > Tableware
+    '餐具': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    '食器': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    '碗': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    '皿': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    '盤': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    '杯': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    '茶碗': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    '湯呑': ('gid://shopify/TaxonomyCategory/hg-6-10', 'Home & Garden > Kitchen & Dining > Tableware'),
+    
+    # 裝飾品 - Decor
+    '裝飾': ('gid://shopify/TaxonomyCategory/hg-3', 'Home & Garden > Decor'),
+    '飾品': ('gid://shopify/TaxonomyCategory/hg-3', 'Home & Garden > Decor'),
+    '置物': ('gid://shopify/TaxonomyCategory/hg-3', 'Home & Garden > Decor'),
+    'インテリア': ('gid://shopify/TaxonomyCategory/hg-3', 'Home & Garden > Decor'),
+    '擺飾': ('gid://shopify/TaxonomyCategory/hg-3', 'Home & Garden > Decor'),
+    
+    # ========== 美妝/保養 (Health & Beauty) ==========
+    
+    '化妝品': ('gid://shopify/TaxonomyCategory/hb-3-2', 'Health & Beauty > Personal Care > Cosmetics'),
+    '保養品': ('gid://shopify/TaxonomyCategory/hb-3-2', 'Health & Beauty > Personal Care > Cosmetics'),
+    'コスメ': ('gid://shopify/TaxonomyCategory/hb-3-2', 'Health & Beauty > Personal Care > Cosmetics'),
+    '化粧品': ('gid://shopify/TaxonomyCategory/hb-3-2', 'Health & Beauty > Personal Care > Cosmetics'),
+    'スキンケア': ('gid://shopify/TaxonomyCategory/hb-3-2', 'Health & Beauty > Personal Care > Cosmetics'),
+    '護膚': ('gid://shopify/TaxonomyCategory/hb-3-2', 'Health & Beauty > Personal Care > Cosmetics'),
+    
+    # ========== 工業/安全用品 (Business & Industrial) ==========
+    
+    # 安全裝備 - Work Safety Protective Gear
+    '安全帽': ('gid://shopify/TaxonomyCategory/bi-25-4', 'Business & Industrial > Work Safety Protective Gear > Hardhats'),
+    'ヘルメット': ('gid://shopify/TaxonomyCategory/bi-25-4', 'Business & Industrial > Work Safety Protective Gear > Hardhats'),
+    '工作帽': ('gid://shopify/TaxonomyCategory/bi-25-4', 'Business & Industrial > Work Safety Protective Gear > Hardhats'),
+    
+    # 安全手套
+    '安全手套': ('gid://shopify/TaxonomyCategory/bi-25-8', 'Business & Industrial > Work Safety Protective Gear > Safety Gloves'),
+    '作業手套': ('gid://shopify/TaxonomyCategory/bi-25-8', 'Business & Industrial > Work Safety Protective Gear > Safety Gloves'),
+    '軍手': ('gid://shopify/TaxonomyCategory/bi-25-8', 'Business & Industrial > Work Safety Protective Gear > Safety Gloves'),
+    '作業用手袋': ('gid://shopify/TaxonomyCategory/bi-25-8', 'Business & Industrial > Work Safety Protective Gear > Safety Gloves'),
+    
+    # 護目鏡
+    '護目鏡': ('gid://shopify/TaxonomyCategory/bi-25-7', 'Business & Industrial > Work Safety Protective Gear > Protective Eyewear'),
+    '保護眼鏡': ('gid://shopify/TaxonomyCategory/bi-25-7', 'Business & Industrial > Work Safety Protective Gear > Protective Eyewear'),
+    '安全眼鏡': ('gid://shopify/TaxonomyCategory/bi-25-7', 'Business & Industrial > Work Safety Protective Gear > Protective Eyewear'),
+}
+
+# 預設類別（當找不到匹配時使用）
+DEFAULT_CATEGORY = ('gid://shopify/TaxonomyCategory/sg-4-3-12', 'Food > Food Gift Baskets')
+
 
 # ============================================================
 # 日文檢測函數
@@ -330,6 +724,304 @@ def delete_product(product_id):
 
 
 # ============================================================
+# 商品類別相關函數
+# ============================================================
+
+def get_product_category(product_id):
+    """
+    使用 GraphQL 取得商品的類別
+    
+    Args:
+        product_id: 商品 ID
+    
+    Returns:
+        dict: {'has_category': bool, 'category_id': str or None, 'category_name': str or None}
+    """
+    url = f'https://{SHOPIFY_SHOP}.myshopify.com/admin/api/2024-01/graphql.json'
+    
+    query = """
+    {
+        product(id: "gid://shopify/Product/%s") {
+            id
+            title
+            category {
+                id
+                name
+                fullName
+            }
+        }
+    }
+    """ % product_id
+    
+    response = api_request_with_retry(url, method='POST', headers=get_shopify_headers(), json={'query': query})
+    
+    if not response or response.status_code != 200:
+        return {'has_category': False, 'category_id': None, 'category_name': None, 'error': 'API 請求失敗'}
+    
+    data = response.json()
+    
+    if 'errors' in data:
+        return {'has_category': False, 'category_id': None, 'category_name': None, 'error': str(data['errors'])}
+    
+    product_data = data.get('data', {}).get('product', {})
+    category = product_data.get('category')
+    
+    if category:
+        return {
+            'has_category': True,
+            'category_id': category.get('id'),
+            'category_name': category.get('fullName') or category.get('name'),
+            'error': None
+        }
+    
+    return {'has_category': False, 'category_id': None, 'category_name': None, 'error': None}
+
+
+def match_category_by_title(title):
+    """
+    根據商品標題匹配適合的類別
+    
+    Args:
+        title: 商品標題
+    
+    Returns:
+        tuple: (category_gid, category_name, matched_keyword) 或 (None, None, None)
+    """
+    if not title:
+        return None, None, None
+    
+    # 按關鍵字長度排序（優先匹配較長的關鍵字）
+    sorted_keywords = sorted(PRODUCT_CATEGORY_MAPPING.keys(), key=len, reverse=True)
+    
+    for keyword in sorted_keywords:
+        if keyword in title:
+            category_gid, category_name = PRODUCT_CATEGORY_MAPPING[keyword]
+            return category_gid, category_name, keyword
+    
+    return None, None, None
+
+
+def set_product_category(product_id, category_gid):
+    """
+    使用 GraphQL 設定商品類別
+    
+    Args:
+        product_id: 商品 ID
+        category_gid: 類別 GID (例如: gid://shopify/TaxonomyCategory/sg-4-3-1-8)
+    
+    Returns:
+        dict: {'success': bool, 'error': str or None}
+    """
+    url = f'https://{SHOPIFY_SHOP}.myshopify.com/admin/api/2024-01/graphql.json'
+    
+    mutation = """
+    mutation productUpdate($input: ProductInput!) {
+        productUpdate(input: $input) {
+            product {
+                id
+                category {
+                    id
+                    name
+                }
+            }
+            userErrors {
+                field
+                message
+            }
+        }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "id": f"gid://shopify/Product/{product_id}",
+            "category": category_gid
+        }
+    }
+    
+    try:
+        response = api_request_with_retry(
+            url, 
+            method='POST', 
+            headers=get_shopify_headers(), 
+            json={'query': mutation, 'variables': variables}
+        )
+        
+        if not response or response.status_code != 200:
+            return {'success': False, 'error': f'API 請求失敗: {response.status_code if response else "無回應"}'}
+        
+        data = response.json()
+        
+        if 'errors' in data:
+            return {'success': False, 'error': str(data['errors'])}
+        
+        user_errors = data.get('data', {}).get('productUpdate', {}).get('userErrors', [])
+        if user_errors:
+            return {'success': False, 'error': str(user_errors)}
+        
+        return {'success': True, 'error': None}
+        
+    except Exception as e:
+        return {'success': False, 'error': f'例外: {str(e)}'}
+
+
+def find_products_without_category():
+    """
+    找出所有沒有類別的商品
+    
+    Returns:
+        dict: {
+            'products': list of products without category,
+            'total_products': int,
+            'products_without_category': int
+        }
+    """
+    print("[類別檢查] 開始取得商品列表...")
+    
+    products = get_all_products(include_status='active')
+    
+    if not products:
+        return {'products': [], 'total_products': 0, 'products_without_category': 0, 'error': '無法取得商品列表'}
+    
+    print(f"[類別檢查] 取得 {len(products)} 個商品，開始檢查類別...")
+    
+    products_without_category = []
+    
+    for i, product in enumerate(products):
+        product_id = product['id']
+        title = product.get('title', '')
+        
+        if (i + 1) % 10 == 0:
+            print(f"[類別檢查] 進度: {i + 1}/{len(products)}")
+        
+        # 檢查類別
+        category_info = get_product_category(product_id)
+        
+        if not category_info['has_category']:
+            # 嘗試匹配類別
+            matched_gid, matched_name, matched_keyword = match_category_by_title(title)
+            
+            products_without_category.append({
+                'id': product_id,
+                'title': title,
+                'handle': product.get('handle', ''),
+                'status': product.get('status', 'unknown'),
+                'suggested_category_gid': matched_gid,
+                'suggested_category_name': matched_name,
+                'matched_keyword': matched_keyword
+            })
+        
+        # 避免 API 限制
+        time.sleep(0.3)
+    
+    print(f"[類別檢查] 完成！找到 {len(products_without_category)} 個沒有類別的商品")
+    
+    return {
+        'products': products_without_category,
+        'total_products': len(products),
+        'products_without_category': len(products_without_category)
+    }
+
+
+def auto_categorize_products(dry_run=True):
+    """
+    自動為沒有類別的商品設定類別
+    
+    Args:
+        dry_run: 如果為 True，只顯示會做什麼，不實際執行
+    
+    Returns:
+        dict: 執行結果
+    """
+    print(f"[自動分類] 開始執行... (dry_run={dry_run})")
+    
+    # 找出沒有類別的商品
+    result = find_products_without_category()
+    
+    if 'error' in result and result['error']:
+        return {'error': result['error']}
+    
+    products = result['products']
+    
+    if not products:
+        return {
+            'message': '所有商品都已有類別',
+            'total_products': result['total_products'],
+            'categorized_count': 0,
+            'skipped_count': 0,
+            'failed_count': 0
+        }
+    
+    categorized = []
+    skipped = []
+    failed = []
+    
+    for product in products:
+        product_id = product['id']
+        title = product['title']
+        suggested_gid = product['suggested_category_gid']
+        suggested_name = product['suggested_category_name']
+        matched_keyword = product['matched_keyword']
+        
+        if not suggested_gid:
+            # 沒有匹配到任何關鍵字，跳過
+            skipped.append({
+                'id': product_id,
+                'title': title,
+                'reason': '無法從標題匹配到適合的類別'
+            })
+            continue
+        
+        if dry_run:
+            # 模擬模式，只記錄
+            categorized.append({
+                'id': product_id,
+                'title': title,
+                'category_gid': suggested_gid,
+                'category_name': suggested_name,
+                'matched_keyword': matched_keyword,
+                'status': 'would_be_set'
+            })
+        else:
+            # 實際執行
+            print(f"[自動分類] 設定商品: {title[:30]}... -> {suggested_name}")
+            
+            set_result = set_product_category(product_id, suggested_gid)
+            
+            if set_result['success']:
+                categorized.append({
+                    'id': product_id,
+                    'title': title,
+                    'category_gid': suggested_gid,
+                    'category_name': suggested_name,
+                    'matched_keyword': matched_keyword,
+                    'status': 'success'
+                })
+            else:
+                failed.append({
+                    'id': product_id,
+                    'title': title,
+                    'error': set_result['error']
+                })
+            
+            # 避免 API 限制
+            time.sleep(0.5)
+    
+    return {
+        'message': f"{'模擬執行' if dry_run else '執行'}完成",
+        'dry_run': dry_run,
+        'total_products': result['total_products'],
+        'products_without_category': len(products),
+        'categorized_count': len(categorized),
+        'skipped_count': len(skipped),
+        'failed_count': len(failed),
+        'categorized': categorized,
+        'skipped': skipped,
+        'failed': failed
+    }
+
+
+# ============================================================
 # 商品檢查函數
 # ============================================================
 
@@ -410,6 +1102,23 @@ def check_product(product, all_collections, brand_names):
             issues.append({'type': '分類檢查', 'issue': '未分類到對應品牌 Collection', 'detail': f"應該在「{expected_brand}」，目前在: {', '.join(product_collections) if product_collections else '無'}"})
     else:
         issues.append({'type': '分類檢查', 'issue': '商品標題不符合任何 Collection 名稱', 'detail': f"標題: {title[:30]}..."})
+    
+    # 類別檢查
+    category_info = get_product_category(product_id)
+    if not category_info['has_category']:
+        matched_gid, matched_name, matched_keyword = match_category_by_title(title)
+        if matched_name:
+            issues.append({
+                'type': '商品類別', 
+                'issue': '缺少商品類別', 
+                'detail': f"建議類別: {matched_name} (關鍵字: {matched_keyword})"
+            })
+        else:
+            issues.append({
+                'type': '商品類別', 
+                'issue': '缺少商品類別', 
+                'detail': '無法自動匹配類別，請手動設定'
+            })
     
     return issues
 
@@ -663,132 +1372,582 @@ def index():
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Shopify 商品健檢工具</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify 商品管理工具 - 御用達</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
-        h1 { color: #333; }
-        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; text-decoration: none; display: inline-block; }
-        .btn:hover { background: #0056b3; }
-        .btn-danger { background: #dc3545; }
-        .btn-danger:hover { background: #c82333; }
-        .btn-warning { background: #ffc107; color: #333; }
-        .btn-warning:hover { background: #e0a800; }
-        .btn-success { background: #28a745; }
-        .btn-success:hover { background: #218838; }
-        .result { background: #f5f5f5; padding: 15px; margin: 20px 0; border-radius: 5px; white-space: pre-wrap; font-family: monospace; max-height: 600px; overflow-y: auto; }
-        .api-list { background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0; }
-        .api-list code { background: #fff; padding: 2px 6px; border-radius: 3px; }
-        .section { background: #fff; border: 1px solid #ddd; padding: 20px; margin: 20px 0; border-radius: 8px; }
-        .section h2 { margin-top: 0; color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
-        .loading { color: #666; font-style: italic; }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #f8f9fa;
+            color: #333;
+        }
+        h1 { 
+            color: #2c3e50; 
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        .header-info {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .btn { 
+            background: #3498db; 
+            color: white; 
+            padding: 12px 20px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            margin: 5px; 
+            text-decoration: none; 
+            display: inline-block;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #2980b9; transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-warning { background: #f39c12; color: #fff; }
+        .btn-warning:hover { background: #d68910; }
+        .btn-success { background: #27ae60; }
+        .btn-success:hover { background: #219a52; }
+        .btn-info { background: #17a2b8; }
+        .btn-info:hover { background: #138496; }
+        .btn-secondary { background: #95a5a6; }
+        .btn-secondary:hover { background: #7f8c8d; }
+        .btn-sm { padding: 8px 14px; font-size: 12px; }
+        
+        .result { 
+            background: #fff; 
+            padding: 20px; 
+            margin: 20px 0; 
+            border-radius: 8px; 
+            white-space: pre-wrap; 
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            max-height: 600px; 
+            overflow-y: auto;
+            border: 1px solid #e1e4e8;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            line-height: 1.6;
+        }
+        
+        .section { 
+            background: #fff; 
+            border: 1px solid #e1e4e8; 
+            padding: 25px; 
+            margin: 20px 0; 
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .section h2 { 
+            margin-top: 0; 
+            color: #2c3e50; 
+            border-bottom: 3px solid #3498db; 
+            padding-bottom: 12px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section p { 
+            color: #666; 
+            margin: 10px 0 15px 0;
+            font-size: 14px;
+        }
+        .section .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .loading { 
+            color: #3498db; 
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .loading::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e1e4e8;
+            border-top-color: #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .stat-card h3 { margin: 0 0 10px 0; font-size: 14px; opacity: 0.9; }
+        .stat-card .number { font-size: 32px; font-weight: bold; }
+        
+        .category-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 13px;
+        }
+        .category-table th, .category-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e1e4e8;
+        }
+        .category-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .category-table tr:hover { background: #f8f9fa; }
+        .category-table .keyword { 
+            background: #e8f4fd; 
+            padding: 3px 8px; 
+            border-radius: 4px;
+            margin: 2px;
+            display: inline-block;
+            font-size: 12px;
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .tag-success { background: #d4edda; color: #155724; }
+        .tag-warning { background: #fff3cd; color: #856404; }
+        .tag-danger { background: #f8d7da; color: #721c24; }
+        .tag-info { background: #d1ecf1; color: #0c5460; }
+        
+        .collapsible {
+            cursor: pointer;
+            padding: 10px;
+            background: #f8f9fa;
+            border: none;
+            width: 100%;
+            text-align: left;
+            font-size: 14px;
+            border-radius: 6px;
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .collapsible:hover { background: #e9ecef; }
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            background: #fff;
+            border-radius: 0 0 6px 6px;
+        }
+        .collapsible-content.show { max-height: 500px; overflow-y: auto; }
+        
+        .api-list { 
+            background: #fff; 
+            padding: 20px; 
+            border-radius: 10px; 
+            margin: 20px 0;
+            border: 1px solid #e1e4e8;
+        }
+        .api-list summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #2c3e50;
+            padding: 10px 0;
+        }
+        .api-list code { 
+            background: #f1f3f5; 
+            padding: 3px 8px; 
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+        }
+        .api-list ul { margin: 15px 0; padding-left: 20px; }
+        .api-list li { margin: 8px 0; color: #555; }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e1e4e8;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #27ae60, #2ecc71);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #999;
+            font-size: 13px;
+        }
+        footer a { color: #3498db; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <h1>🔍 Shopify 商品健檢工具</h1>
+    <h1>🛒 Shopify 商品管理工具</h1>
+    <p class="header-info">御用達 GOYOUTATI | <a href="https://goyoutati.com" target="_blank">https://goyoutati.com</a></p>
     
-    <div class="api-list">
-        <h3>可用 API：</h3>
-        <ul>
-            <li><code>/api/check</code> - 執行完整商品檢查</li>
-            <li><code>/api/results</code> - 取得最新檢查結果</li>
-            <li><code>/api/find-duplicates</code> - 找出重複商品（handle 結尾 -1, -2, -3...）</li>
-            <li><code>/api/delete-duplicates</code> - 刪除重複商品</li>
-            <li><code>/api/delete-product/&lt;id&gt;</code> - 刪除指定商品</li>
-        </ul>
+    <div id="stats-container"></div>
+    
+    <div class="section">
+        <h2>🏷️ 商品類別自動分類</h2>
+        <p>根據商品標題中的關鍵字，自動設定 Shopify 標準分類（支援日文、中文關鍵字）</p>
+        <div class="btn-group">
+            <button class="btn btn-info" onclick="findUncategorized()">🔍 查詢未分類商品</button>
+            <button class="btn btn-warning" onclick="autoCategorize(true)">👁️ 預覽分類結果</button>
+            <button class="btn btn-success" onclick="autoCategorize(false)">✅ 執行自動分類</button>
+            <button class="btn btn-secondary" onclick="showKeywords()">📋 關鍵字對照表</button>
+        </div>
+        <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 6px; font-size: 13px;">
+            <strong>💡 使用說明：</strong>
+            <ol style="margin: 10px 0 0 0; padding-left: 20px; color: #666;">
+                <li>先點擊「查詢未分類商品」查看有多少商品需要分類</li>
+                <li>點擊「預覽分類結果」確認系統建議的分類是否正確</li>
+                <li>確認無誤後，點擊「執行自動分類」套用分類</li>
+            </ol>
+        </div>
     </div>
     
     <div class="section">
         <h2>🔄 重複商品管理</h2>
-        <p>找出並刪除 Shopify 自動產生的重複商品（handle 結尾是 -1, -2, -3...）</p>
-        <button class="btn btn-warning" onclick="findDuplicates()">🔍 查詢重複商品</button>
-        <button class="btn btn-danger" onclick="deleteDuplicates()">🗑️ 刪除全部重複商品</button>
-        <button class="btn btn-success" onclick="refreshProducts()">🔄 重新載入商品列表</button>
+        <p>自動偵測並清理 Shopify 產生的重複商品（handle 結尾為 -1, -2, -3... 的商品）</p>
+        <div class="btn-group">
+            <button class="btn btn-warning" onclick="findDuplicates()">🔍 查詢重複商品</button>
+            <button class="btn btn-danger" onclick="deleteDuplicates()">🗑️ 刪除重複商品</button>
+            <button class="btn btn-secondary" onclick="refreshProducts()">🔄 重新整理</button>
+        </div>
     </div>
     
     <div class="section">
         <h2>📋 商品健檢</h2>
-        <button class="btn" onclick="runCheck()">▶️ 執行檢查</button>
-        <button class="btn" onclick="getResults()">📋 查看結果</button>
+        <p>檢查商品資料完整性：缺少圖片、缺少描述、價格異常等</p>
+        <div class="btn-group">
+            <button class="btn" onclick="runCheck()">▶️ 執行健檢</button>
+            <button class="btn btn-secondary" onclick="getResults()">📊 查看報告</button>
+        </div>
     </div>
     
-    <h3>執行結果：</h3>
-    <div id="result" class="result">點擊上方按鈕執行操作...</div>
+    <h3 style="margin-top: 30px;">📤 執行結果</h3>
+    <div id="result" class="result">👆 點擊上方按鈕開始操作...</div>
+    
+    <details class="api-list">
+        <summary>🔧 API 端點列表（開發者用）</summary>
+        <ul>
+            <li><code>GET /api/check</code> - 執行完整商品健檢</li>
+            <li><code>GET /api/results</code> - 取得最新檢查結果</li>
+            <li><code>GET /api/find-duplicates</code> - 找出重複商品</li>
+            <li><code>GET /api/delete-duplicates</code> - 刪除所有重複商品</li>
+            <li><code>GET /api/delete-product/{id}</code> - 刪除指定商品</li>
+            <li><code>GET /api/find-uncategorized</code> - 找出未分類商品</li>
+            <li><code>GET /api/auto-categorize?dry_run=true</code> - 預覽自動分類</li>
+            <li><code>GET /api/auto-categorize?dry_run=false</code> - 執行自動分類</li>
+            <li><code>GET /api/category-keywords</code> - 取得關鍵字對照表</li>
+            <li><code>GET /api/set-category/{product_id}?category_gid=xxx</code> - 手動設定單一商品分類</li>
+        </ul>
+    </details>
+    
+    <footer>
+        Powered by Claude AI | 
+        <a href="https://shopify.github.io/product-taxonomy/" target="_blank">Shopify 標準分類法</a>
+    </footer>
     
     <script>
         function showLoading(msg) {
             document.getElementById('result').innerHTML = '<span class="loading">' + msg + '</span>';
         }
         
+        function formatNumber(num) {
+            return num.toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");
+        }
+        
+        async function findUncategorized() {
+            showLoading('正在掃描所有商品，查詢未分類商品（約需 1-3 分鐘）...');
+            try {
+                const res = await fetch('/api/find-uncategorized');
+                const data = await res.json();
+                
+                // 更新統計卡片
+                updateStats({
+                    total: data.total_products,
+                    uncategorized: data.products_without_category,
+                    categorized: data.total_products - data.products_without_category
+                });
+                
+                let output = '══════════════════════════════════════════════════════════════\\n';
+                output += '                    📊 未分類商品查詢結果                      \\n';
+                output += '══════════════════════════════════════════════════════════════\\n\\n';
+                
+                output += '📈 統計摘要\\n';
+                output += '─────────────────────────────────────\\n';
+                output += '  總商品數：     ' + formatNumber(data.total_products) + ' 個\\n';
+                output += '  未分類商品：   ' + formatNumber(data.products_without_category) + ' 個\\n';
+                output += '  分類完成率：   ' + ((data.total_products - data.products_without_category) / data.total_products * 100).toFixed(1) + '%\\n\\n';
+                
+                if (data.products && data.products.length > 0) {
+                    let canMatch = 0;
+                    let cannotMatch = 0;
+                    
+                    data.products.forEach(p => {
+                        if (p.suggested_category_name) canMatch++;
+                        else cannotMatch++;
+                    });
+                    
+                    output += '🤖 自動分類分析\\n';
+                    output += '─────────────────────────────────────\\n';
+                    output += '  ✅ 可自動分類：  ' + canMatch + ' 個\\n';
+                    output += '  ❌ 需手動設定：  ' + cannotMatch + ' 個\\n\\n';
+                    
+                    output += '📝 商品列表\\n';
+                    output += '══════════════════════════════════════════════════════════════\\n\\n';
+                    
+                    data.products.forEach((p, i) => {
+                        output += '【' + (i + 1) + '】' + p.title + '\\n';
+                        if (p.suggested_category_name) {
+                            output += '    ✅ 建議分類：' + p.suggested_category_name + '\\n';
+                            output += '    🔑 匹配關鍵字：「' + p.matched_keyword + '」\\n';
+                        } else {
+                            output += '    ❌ 無法自動匹配，需手動設定分類\\n';
+                        }
+                        output += '\\n';
+                    });
+                } else {
+                    output += '✅ 太棒了！所有商品都已設定分類！\\n';
+                }
+                
+                document.getElementById('result').textContent = output;
+            } catch (e) {
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
+            }
+        }
+        
+        async function autoCategorize(dryRun) {
+            const mode = dryRun ? '預覽' : '執行';
+            if (!dryRun && !confirm('⚠️ 確定要執行自動分類嗎？\\n\\n這將會修改所有可匹配商品的分類設定！\\n\\n建議先使用「預覽分類結果」確認無誤後再執行。')) return;
+            
+            showLoading('正在' + mode + '自動分類（約需 2-5 分鐘）...');
+            try {
+                const res = await fetch('/api/auto-categorize?dry_run=' + dryRun);
+                const data = await res.json();
+                
+                let output = '══════════════════════════════════════════════════════════════\\n';
+                output += '                  🏷️ 自動分類' + mode + '結果                       \\n';
+                output += '══════════════════════════════════════════════════════════════\\n\\n';
+                
+                output += '📊 ' + data.message + '\\n\\n';
+                
+                output += '📈 統計摘要\\n';
+                output += '─────────────────────────────────────\\n';
+                output += '  總商品數：       ' + formatNumber(data.total_products) + ' 個\\n';
+                output += '  未分類商品：     ' + formatNumber(data.products_without_category) + ' 個\\n';
+                output += '  ' + (dryRun ? '將會' : '已經') + '分類：    ' + formatNumber(data.categorized_count) + ' 個\\n';
+                output += '  跳過（無法匹配）：' + formatNumber(data.skipped_count) + ' 個\\n';
+                if (data.failed_count > 0) {
+                    output += '  ❌ 失敗：         ' + formatNumber(data.failed_count) + ' 個\\n';
+                }
+                output += '\\n';
+                
+                if (data.categorized && data.categorized.length > 0) {
+                    output += '✅ ' + (dryRun ? '將會' : '已經') + '分類的商品\\n';
+                    output += '══════════════════════════════════════════════════════════════\\n';
+                    data.categorized.forEach((p, i) => {
+                        const title = p.title.length > 45 ? p.title.substring(0, 45) + '...' : p.title;
+                        output += '\\n【' + (i + 1) + '】' + title + '\\n';
+                        output += '    → 分類：' + p.category_name + '\\n';
+                        output += '    → 關鍵字：「' + p.matched_keyword + '」\\n';
+                    });
+                    output += '\\n';
+                }
+                
+                if (data.skipped && data.skipped.length > 0) {
+                    output += '\\n⏭️ 跳過的商品（需手動設定）\\n';
+                    output += '══════════════════════════════════════════════════════════════\\n';
+                    data.skipped.forEach((p, i) => {
+                        const title = p.title.length > 50 ? p.title.substring(0, 50) + '...' : p.title;
+                        output += '\\n【' + (i + 1) + '】' + title + '\\n';
+                        output += '    ⚠️ 原因：' + p.reason + '\\n';
+                    });
+                }
+                
+                if (data.failed && data.failed.length > 0) {
+                    output += '\\n\\n❌ 分類失敗的商品\\n';
+                    output += '══════════════════════════════════════════════════════════════\\n';
+                    data.failed.forEach((p, i) => {
+                        output += '\\n【' + (i + 1) + '】' + p.title + '\\n';
+                        output += '    錯誤：' + p.error + '\\n';
+                    });
+                }
+                
+                document.getElementById('result').textContent = output;
+            } catch (e) {
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
+            }
+        }
+        
+        async function showKeywords() {
+            showLoading('載入關鍵字對照表...');
+            try {
+                const res = await fetch('/api/category-keywords');
+                const data = await res.json();
+                
+                let output = '══════════════════════════════════════════════════════════════\\n';
+                output += '                    📋 類別關鍵字對照表                         \\n';
+                output += '══════════════════════════════════════════════════════════════\\n\\n';
+                
+                output += '共收錄 ' + data.total_keywords + ' 個關鍵字\\n\\n';
+                
+                // 按大類分組
+                const byMainCategory = {};
+                data.keywords.forEach(k => {
+                    const mainCat = k.category_name.split(' > ')[0];
+                    if (!byMainCategory[mainCat]) {
+                        byMainCategory[mainCat] = {};
+                    }
+                    if (!byMainCategory[mainCat][k.category_name]) {
+                        byMainCategory[mainCat][k.category_name] = [];
+                    }
+                    byMainCategory[mainCat][k.category_name].push(k.keyword);
+                });
+                
+                for (const [mainCat, subCats] of Object.entries(byMainCategory)) {
+                    output += '\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';
+                    output += '📁 ' + mainCat + '\\n';
+                    output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';
+                    
+                    for (const [category, keywords] of Object.entries(subCats)) {
+                        output += '\\n  📂 ' + category + '\\n';
+                        output += '     關鍵字：' + keywords.join('、') + '\\n';
+                    }
+                }
+                
+                output += '\\n\\n══════════════════════════════════════════════════════════════\\n';
+                output += '💡 如需新增關鍵字，請修改 app.py 中的 PRODUCT_CATEGORY_MAPPING\\n';
+                output += '══════════════════════════════════════════════════════════════\\n';
+                
+                document.getElementById('result').textContent = output;
+            } catch (e) {
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
+            }
+        }
+        
         async function findDuplicates() {
-            showLoading('正在查詢重複商品（可能需要 1-2 分鐘）...');
+            showLoading('正在掃描重複商品（約需 1-2 分鐘）...');
             try {
                 const res = await fetch('/api/find-duplicates');
                 const data = await res.json();
                 
-                // 格式化顯示
-                let output = '=== 重複商品查詢結果 ===\\n\\n';
-                output += '總商品數: ' + data.total_products + '\\n';
-                output += '不重複 handle 數: ' + data.unique_handles + '\\n';
-                output += '重複商品數: ' + data.count + '\\n\\n';
+                let output = '══════════════════════════════════════════════════════════════\\n';
+                output += '                    🔄 重複商品查詢結果                         \\n';
+                output += '══════════════════════════════════════════════════════════════\\n\\n';
+                
+                output += '📈 統計摘要\\n';
+                output += '─────────────────────────────────────\\n';
+                output += '  總商品數：       ' + formatNumber(data.total_products) + ' 個\\n';
+                output += '  不重複 handle：  ' + formatNumber(data.unique_handles) + ' 個\\n';
+                output += '  重複商品數：     ' + formatNumber(data.count) + ' 個\\n\\n';
                 
                 if (data.breakdown && Object.keys(data.breakdown).length > 0) {
-                    output += '分類統計:\\n';
+                    output += '📊 重複類型分布\\n';
+                    output += '─────────────────────────────────────\\n';
                     for (const [key, value] of Object.entries(data.breakdown)) {
-                        output += '  ' + key + ': ' + value + ' 個\\n';
+                        output += '  結尾 ' + key + '：' + value + ' 個\\n';
                     }
                     output += '\\n';
                 }
                 
                 if (data.duplicates && data.duplicates.length > 0) {
-                    output += '重複商品列表:\\n';
-                    output += '─'.repeat(60) + '\\n';
+                    output += '📝 重複商品列表\\n';
+                    output += '══════════════════════════════════════════════════════════════\\n';
                     data.duplicates.forEach((d, i) => {
-                        output += (i + 1) + '. ' + d.title + '\\n';
-                        output += '   Handle: ' + d.handle + '\\n';
-                        output += '   原始: ' + d.original_handle + ' (ID: ' + d.original_id + ')\\n';
-                        output += '   狀態: ' + d.status + '\\n\\n';
+                        output += '\\n【' + (i + 1) + '】' + d.title + '\\n';
+                        output += '    Handle：' + d.handle + '\\n';
+                        output += '    原始商品：' + d.original_handle + '\\n';
+                        output += '    狀態：' + d.status + '\\n';
                     });
                 } else {
-                    output += '✅ 沒有找到重複商品\\n';
+                    output += '\\n✅ 太棒了！沒有找到重複商品！\\n';
                 }
                 
                 document.getElementById('result').textContent = output;
             } catch (e) {
-                document.getElementById('result').textContent = '錯誤: ' + e.message;
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
             }
         }
         
         async function deleteDuplicates() {
-            if (!confirm('確定要刪除所有重複商品嗎？\\n\\n⚠️ 此操作無法復原！\\n\\n建議先用「查詢重複商品」確認清單！')) return;
+            if (!confirm('⚠️ 警告！此操作無法復原！\\n\\n確定要刪除所有重複商品嗎？\\n\\n建議先使用「查詢重複商品」確認清單！')) return;
+            
             showLoading('正在刪除重複商品...');
             try {
                 const res = await fetch('/api/delete-duplicates');
                 const data = await res.json();
                 
-                let output = '=== 刪除結果 ===\\n\\n';
+                let output = '══════════════════════════════════════════════════════════════\\n';
+                output += '                    🗑️ 重複商品刪除結果                         \\n';
+                output += '══════════════════════════════════════════════════════════════\\n\\n';
+                
                 output += data.message + '\\n\\n';
-                output += '成功刪除: ' + data.deleted_count + ' 個\\n';
-                output += '刪除失敗: ' + data.failed_count + ' 個\\n\\n';
+                output += '📈 統計\\n';
+                output += '─────────────────────────────────────\\n';
+                output += '  ✅ 成功刪除：' + data.deleted_count + ' 個\\n';
+                output += '  ❌ 刪除失敗：' + data.failed_count + ' 個\\n\\n';
                 
                 if (data.deleted && data.deleted.length > 0) {
-                    output += '已刪除:\\n';
+                    output += '✅ 已刪除的商品\\n';
+                    output += '─────────────────────────────────────\\n';
                     data.deleted.forEach(d => {
-                        output += '  ✓ ' + d.title + ' (' + d.handle + ')\\n';
+                        output += '  ✓ ' + d.title + '\\n';
+                        output += '    (' + d.handle + ')\\n';
                     });
                     output += '\\n';
                 }
                 
                 if (data.failed && data.failed.length > 0) {
-                    output += '刪除失敗:\\n';
+                    output += '❌ 刪除失敗的商品\\n';
+                    output += '─────────────────────────────────────\\n';
                     data.failed.forEach(d => {
                         output += '  ✗ ' + d.title + '\\n';
-                        output += '    原因: ' + (d.error || '未知') + '\\n';
+                        output += '    原因：' + (d.error || '未知錯誤') + '\\n';
                     });
                 }
                 
                 document.getElementById('result').textContent = output;
             } catch (e) {
-                document.getElementById('result').textContent = '錯誤: ' + e.message;
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
             }
         }
         
@@ -797,20 +1956,26 @@ def index():
             try {
                 const res = await fetch('/api/refresh-products');
                 const data = await res.json();
-                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('result').textContent = '✅ ' + JSON.stringify(data, null, 2);
             } catch (e) {
-                document.getElementById('result').textContent = '錯誤: ' + e.message;
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
             }
         }
         
         async function runCheck() {
-            showLoading('正在執行檢查（可能需要幾分鐘）...');
+            showLoading('正在執行商品健檢（約需 3-5 分鐘）...');
             try {
                 const res = await fetch('/api/check');
                 const data = await res.json();
-                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                
+                let output = '══════════════════════════════════════════════════════════════\\n';
+                output += '                    📋 商品健檢報告                             \\n';
+                output += '══════════════════════════════════════════════════════════════\\n\\n';
+                output += JSON.stringify(data, null, 2);
+                
+                document.getElementById('result').textContent = output;
             } catch (e) {
-                document.getElementById('result').textContent = '錯誤: ' + e.message;
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
             }
         }
         
@@ -818,10 +1983,44 @@ def index():
             try {
                 const res = await fetch('/api/results');
                 const data = await res.json();
-                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                
+                let output = '══════════════════════════════════════════════════════════════\\n';
+                output += '                    📊 最新檢查結果                             \\n';
+                output += '══════════════════════════════════════════════════════════════\\n\\n';
+                output += JSON.stringify(data, null, 2);
+                
+                document.getElementById('result').textContent = output;
             } catch (e) {
-                document.getElementById('result').textContent = '錯誤: ' + e.message;
+                document.getElementById('result').textContent = '❌ 錯誤: ' + e.message;
             }
+        }
+        
+        function updateStats(data) {
+            const container = document.getElementById('stats-container');
+            if (!data) return;
+            
+            const pct = ((data.categorized / data.total) * 100).toFixed(1);
+            
+            container.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card blue">
+                        <h3>總商品數</h3>
+                        <div class="number">${formatNumber(data.total)}</div>
+                    </div>
+                    <div class="stat-card green">
+                        <h3>已分類</h3>
+                        <div class="number">${formatNumber(data.categorized)}</div>
+                    </div>
+                    <div class="stat-card orange">
+                        <h3>未分類</h3>
+                        <div class="number">${formatNumber(data.uncategorized)}</div>
+                    </div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-bar-fill" style="width: ${pct}%"></div>
+                </div>
+                <p style="text-align: center; color: #666; font-size: 13px;">分類完成率：${pct}%</p>
+            `;
         }
     </script>
 </body>
@@ -959,6 +2158,75 @@ def api_refresh_products():
         'potential_duplicates_count': len(potential_duplicates),
         'potential_duplicates': potential_duplicates[:50],  # 只顯示前 50 個
         'sample_handles': handles[:20]  # 顯示前 20 個 handle 供參考
+    })
+
+
+# ============================================================
+# 商品類別相關 API
+# ============================================================
+
+@app.route('/api/find-uncategorized')
+def api_find_uncategorized():
+    """API - 找出沒有類別的商品"""
+    result = find_products_without_category()
+    return jsonify(result)
+
+
+@app.route('/api/auto-categorize')
+def api_auto_categorize():
+    """
+    API - 自動分類商品
+    
+    參數:
+        dry_run: true（預設）只顯示會做什麼，false 實際執行
+    """
+    dry_run_str = request.args.get('dry_run', 'true').lower()
+    dry_run = dry_run_str != 'false'
+    
+    result = auto_categorize_products(dry_run=dry_run)
+    return jsonify(result)
+
+
+@app.route('/api/category-keywords')
+def api_category_keywords():
+    """API - 查看類別關鍵字對照表"""
+    keywords = []
+    for keyword, (gid, name) in PRODUCT_CATEGORY_MAPPING.items():
+        keywords.append({
+            'keyword': keyword,
+            'category_gid': gid,
+            'category_name': name
+        })
+    
+    # 按類別名稱排序
+    keywords.sort(key=lambda x: x['category_name'])
+    
+    return jsonify({
+        'total_keywords': len(keywords),
+        'keywords': keywords
+    })
+
+
+@app.route('/api/set-category/<int:product_id>')
+def api_set_category(product_id):
+    """
+    API - 手動設定單一商品類別
+    
+    參數:
+        category_gid: 類別 GID (例如: gid://shopify/TaxonomyCategory/sg-4-3-1-8)
+    """
+    category_gid = request.args.get('category_gid')
+    
+    if not category_gid:
+        return jsonify({'error': '請提供 category_gid 參數'})
+    
+    result = set_product_category(product_id, category_gid)
+    
+    return jsonify({
+        'product_id': product_id,
+        'category_gid': category_gid,
+        'success': result['success'],
+        'error': result['error']
     })
 
 
